@@ -24,6 +24,7 @@ class Repository(Protocol):
     def finalize_draft(self, user_id: str) -> InvoiceDraft | None: ...
     def add_client(self, user_id: str, name: str, company: str = "", email: str = "", phone: str = "", address: str = "") -> Client: ...
     def list_clients(self, user_id: str) -> list[Client]: ...
+    def get_client(self, user_id: str, client_id: str) -> Client | None: ...
     def list_history(self, user_id: str) -> list[InvoiceDraft]: ...
     def record_ticket(self, ticket: SupportTicket) -> None: ...
     def invoice_count_this_month(self, user_id: str) -> int: ...
@@ -83,6 +84,12 @@ class InMemoryRepository:
 
     def list_clients(self, user_id: str) -> list[Client]:
         return self.clients[user_id]
+
+    def get_client(self, user_id: str, client_id: str) -> Client | None:
+        for client in self.clients[user_id]:
+            if client.id == client_id:
+                return client
+        return None
 
     def list_history(self, user_id: str) -> list[InvoiceDraft]:
         return self.history[user_id]
@@ -604,6 +611,21 @@ class PostgresRepository:
                 (user["id"],),
             )
             return [self._row_to_client(row) for row in cur.fetchall()]
+
+    def get_client(self, user_id: str, client_id: str) -> Client | None:
+        user = self._ensure_user(user_id)
+        with self._connect() as conn, conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT id, name, company, email, phone, address
+                FROM clients
+                WHERE user_id = %s AND id = %s
+                LIMIT 1
+                """,
+                (user["id"], client_id),
+            )
+            row = cur.fetchone()
+            return self._row_to_client(row) if row else None
 
     def list_history(self, user_id: str) -> list[InvoiceDraft]:
         user = self._ensure_user(user_id)

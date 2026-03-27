@@ -35,13 +35,28 @@ async def invoice_command(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     repo = _repo(context)
     user_id = _user_key(update)
     draft = repo.create_draft(user_id)
-    context.user_data["mode"] = "invoice_items"
-    await update.message.reply_text(
-        "Invoice draft started. Send line items like:\n"
-        "`Labour x 2 at $95`\n`Materials $45`\n\n"
-        "You can send multiple lines at once, then use /generate.",
-        parse_mode="Markdown",
-    )
+    clients = repo.list_clients(user_id)
+    if clients:
+        context.user_data["mode"] = "invoice_client_select"
+        context.user_data["client_options"] = {str(index + 1): client.id for index, client in enumerate(clients[:10])}
+        client_lines = "\n".join(
+            f"{index + 1}. {client.name} ({client.company or 'no company'})"
+            for index, client in enumerate(clients[:10])
+        )
+        await update.message.reply_text(
+            "Invoice draft started. Choose a saved client by number, or type `skip` to continue without one.\n\n"
+            f"{client_lines}",
+            parse_mode="Markdown",
+        )
+    else:
+        context.user_data["mode"] = "invoice_items"
+        await update.message.reply_text(
+            "Invoice draft started. No saved clients found, so we’ll start with line items.\n\n"
+            "Send line items like:\n"
+            "`Labour x 2 at $95`\n`Materials $45`\n\n"
+            "You can send multiple lines at once, then use /generate.",
+            parse_mode="Markdown",
+        )
     if not draft.items:
         return
 
@@ -53,6 +68,7 @@ async def generate_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     if not draft or not draft.items:
         await update.message.reply_text("Start with /invoice and add at least one line item first.")
         return
+    client = repo.get_client(user_id, draft.client_id) if draft.client_id else None
 
     decision = evaluate_quota(
         invoice_count_this_month=repo.invoice_count_this_month(user_id),
@@ -75,7 +91,9 @@ async def generate_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -
          [InlineKeyboardButton("Edit draft", callback_data="edit_draft")]]
     )
     await update.message.reply_text(
-        f"Please confirm this invoice:\n\n{lines}\n\n"
+        f"Please confirm this invoice:\n\n"
+        f"Client: {client.name if client else 'No client selected'}\n\n"
+        f"{lines}\n\n"
         f"Subtotal: ${draft.subtotal_cents / 100:.2f}\nGST: ${draft.gst_cents / 100:.2f}\nTotal: ${draft.total_cents / 100:.2f}",
         reply_markup=keyboard,
     )
@@ -165,6 +183,41 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             await update.message.reply_text(f"Added {len(draft.items)} item(s) so far. Use /generate when ready.")
         except ValueError as exc:
             await update.message.reply_text(str(exc))
+        return
+
+    if mode == "invoice_client_select":
+        draft = repo.get_draft(user_id) or repo.create_draft(user_id)
+        if text.lower() == "skip":
+            context.user_data["mode"] = "invoice_items"
+            await update.message.reply_text(
+                "No client selected. Now send line items like:\n"
+                "`Labour x 2 at $95`\n`Materials $45`\n\n"
+                "You can send multiple lines at once, then use /generate.",
+                parse_mode="Markdown",
+            )
+            return
+
+        client_options = context.user_data.get("client_options", {})
+        client_id = client_options.get(text)
+        if not client_id:
+            await update.message.reply_text("Send a listed client number, or type `skip` to continue without a client.", parse_mode="Markdown")
+            return
+
+        client = repo.get_client(user_id, client_id)
+        if not client:
+            await update.message.reply_text("I couldn't find that client anymore. Try again or type `skip`.")
+            return
+
+        draft.client_id = client.id
+        repo.save_draft(draft)
+        context.user_data["mode"] = "invoice_items"
+        await update.message.reply_text(
+            f"Selected client: {client.name}.\n\n"
+            "Now send line items like:\n"
+            "`Labour x 2 at $95`\n`Materials $45`\n\n"
+            "You can send multiple lines at once, then use /generate.",
+            parse_mode="Markdown",
+        )
         return
 
     if mode == "profile_company_name":
@@ -314,7 +367,8 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             await query.edit_message_text("Draft expired. Start again with /invoice.")
             return
         profile = repo.get_or_create_profile(user_id)
-        pdf_bytes = render_invoice_pdf(profile, draft, None)
+        client = repo.get_client(user_id, draft.client_id) if draft.client_id else None
+        pdf_bytes = render_invoice_pdf(profile, draft, client)
         repo.finalize_draft(user_id)
         repo.consume_paid_credit_if_needed(user_id, context.application.bot_data["settings"].free_invoice_limit)
         await query.edit_message_text("Invoice generated and sent below.")
