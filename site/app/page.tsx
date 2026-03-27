@@ -3,7 +3,7 @@ import { invoiceTemplates, pricing } from "@invoicebot/shared";
 const features = [
   {
     title: "Speak the invoice",
-    body: "Send a voice note or typed job details in Telegram and let InvoiceBot turn them into line items."
+    body: "Send a voice note or typed job details in Telegram and let InvoiceBot turn them into line items, with voice protected by fair-use limits."
   },
   {
     title: "Choose a template once",
@@ -23,6 +23,10 @@ const faqs = [
   {
     title: "Do I get free invoices?",
     body: `Yes. You get ${pricing.freeInvoicesPerMonth} free invoices each month, then NZD $${pricing.paidBlockPriceNzd} for every extra block of ${pricing.paidBlockSize}.`
+  },
+  {
+    title: "Is voice invoicing included?",
+    body: `Yes, with guardrails. Voice starts with ${pricing.freeVoiceTranscriptionsPerMonth} free transcriptions per month, then becomes a premium-metered feature.`
   },
   {
     title: "Can I save clients and business details?",
@@ -125,13 +129,15 @@ export default function HomePage() {
             <h3>Simple pricing</h3>
             <div className="priceValue">10 free</div>
             <p>
-              Start free every month. When you need more, unlock another 10 invoices for NZD ${pricing.paidBlockPriceNzd}.
+              Start free every month. Voice also includes {pricing.freeVoiceTranscriptionsPerMonth} free transcriptions,
+              then unlock another 10 invoices for NZD ${pricing.paidBlockPriceNzd}.
             </p>
           </article>
           <article className="priceCard">
             <h3>What you get</h3>
             <p>
-              Voice or text invoice capture, saved clients, default template selection, branded PDF output, and support through Telegram.
+              Voice or text invoice capture, saved clients, default template selection, branded PDF output,
+              and support through Telegram, with premium voice capacity as usage grows.
             </p>
             <div className="heroActions">
               <a

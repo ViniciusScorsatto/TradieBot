@@ -8,7 +8,8 @@ export default function DashboardHome() {
         <p>
           This dashboard is the operational nerve center for InvoiceBot. It tracks the
           tradies currently using the Telegram bot, how close they are to the free limit,
-          what template they chose, what they have paid, and who needs support.
+          what template they chose, what they have paid, how voice usage should be controlled,
+          and who needs support.
         </p>
       </section>
 
@@ -27,7 +28,8 @@ export default function DashboardHome() {
           <p>
             Free plan includes {dashboardCopy.pricing.freeInvoicesPerMonth} invoices per month.
             Warn at {dashboardCopy.pricing.warningThreshold}, then sell another block of{" "}
-            {dashboardCopy.pricing.paidBlockSize} for NZD ${dashboardCopy.pricing.paidBlockPriceNzd}.
+            {dashboardCopy.pricing.paidBlockSize} for NZD ${dashboardCopy.pricing.paidBlockPriceNzd}. Voice starts with{" "}
+            {dashboardCopy.pricing.freeVoiceTranscriptionsPerMonth} free transcriptions and should later be monetized separately.
           </p>
           <table className="table">
             <thead>

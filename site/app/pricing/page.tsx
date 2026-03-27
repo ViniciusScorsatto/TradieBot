@@ -13,12 +13,18 @@ export default function PricingPage() {
         <article className="priceCard">
           <h3>Free every month</h3>
           <div className="priceValue">{pricing.freeInvoicesPerMonth}</div>
-          <p>Every tradie gets {pricing.freeInvoicesPerMonth} invoices per month before any payment is required.</p>
+          <p>
+            Every tradie gets {pricing.freeInvoicesPerMonth} invoices per month plus{" "}
+            {pricing.freeVoiceTranscriptionsPerMonth} free voice transcriptions before any payment is required.
+          </p>
         </article>
         <article className="priceCard">
           <h3>Extra usage</h3>
           <div className="priceValue">NZD ${pricing.paidBlockPriceNzd}</div>
-          <p>Unlock another {pricing.paidBlockSize} invoices whenever you hit the monthly limit.</p>
+          <p>
+            Unlock another {pricing.paidBlockSize} invoices whenever you hit the monthly limit.
+            Voice is positioned as a premium-metered feature after the free allowance.
+          </p>
         </article>
       </div>
     </main>

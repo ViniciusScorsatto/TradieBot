@@ -48,7 +48,9 @@ export const pricing = {
   freeInvoicesPerMonth: 10,
   warningThreshold: 8,
   paidBlockSize: 10,
-  paidBlockPriceNzd: 5
+  paidBlockPriceNzd: 5,
+  freeVoiceTranscriptionsPerMonth: 3,
+  voiceNoteMaxSeconds: 90
 };
 
 export const siteConfig = {
