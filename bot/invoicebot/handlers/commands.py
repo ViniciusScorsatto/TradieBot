@@ -103,10 +103,14 @@ async def profile_command(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     repo = _repo(context)
     profile = repo.get_or_create_profile(_user_key(update))
     context.user_data["mode"] = "profile_company_name"
+    company_prompt = "Send your company name."
+    if profile.company_name:
+        company_prompt = "Send your company name, or type `skip` to keep it."
     await update.message.reply_text(
         "Let’s set up your business profile.\n"
         f"Current company name: {profile.company_name or 'not set'}\n"
-        "Send your company name."
+        f"{company_prompt}",
+        parse_mode="Markdown",
     )
 
 
@@ -222,15 +226,22 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
     if mode == "profile_company_name":
         profile = repo.get_or_create_profile(user_id)
-        profile.company_name = text
+        if text.lower() != "skip" or not profile.company_name:
+            profile.company_name = text
         repo.save_profile(user_id, profile)
         context.user_data["mode"] = "profile_gst_number"
-        await update.message.reply_text("Saved. Now send your GST number, or type `skip`.", parse_mode="Markdown")
+        gst_prompt = (
+            "Saved. Now send your GST number."
+            if not profile.gst_number
+            else f"Saved. Current GST number: {profile.gst_number}\nSend your GST number, or type `skip` to keep it."
+        )
+        await update.message.reply_text(gst_prompt, parse_mode="Markdown")
         return
 
     if mode == "profile_gst_number":
         profile = repo.get_or_create_profile(user_id)
-        profile.gst_number = "" if text.lower() == "skip" else text
+        if text.lower() != "skip" or not profile.gst_number:
+            profile.gst_number = text
         repo.save_profile(user_id, profile)
         context.user_data["mode"] = None
         await update.message.reply_text("Profile saved. Use /template to pick your default invoice layout.")
