@@ -1,5 +1,7 @@
 import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
 import { invoiceTemplates } from "@invoicebot/shared";
+import { ActionButton } from "../../components/action-button";
 import { prisma } from "../../lib/prisma";
 
 type AdminUserRow = {
@@ -41,6 +43,7 @@ async function resetVoiceUsage(formData: FormData) {
   "use server";
 
   const userId = String(formData.get("userId") ?? "");
+  const userName = String(formData.get("userName") ?? "user");
   if (!userId) {
     return;
   }
@@ -52,12 +55,14 @@ async function resetVoiceUsage(formData: FormData) {
     WHERE id = ${userId}
   `;
   revalidatePath("/users");
+  redirect(`/users?message=${encodeURIComponent(`Voice usage reset for ${userName}`)}`);
 }
 
 async function resetInvoiceCount(formData: FormData) {
   "use server";
 
   const userId = String(formData.get("userId") ?? "");
+  const userName = String(formData.get("userName") ?? "user");
   if (!userId) {
     return;
   }
@@ -69,10 +74,16 @@ async function resetInvoiceCount(formData: FormData) {
     WHERE id = ${userId}
   `;
   revalidatePath("/users");
+  redirect(`/users?message=${encodeURIComponent(`Invoice count reset for ${userName}`)}`);
 }
 
-export default async function UsersPage() {
+export default async function UsersPage({
+  searchParams
+}: {
+  searchParams?: { message?: string };
+}) {
   const users = await loadUsers();
+  const message = searchParams?.message;
   return (
     <div className="stack">
       <section className="hero-card">
@@ -82,6 +93,12 @@ export default async function UsersPage() {
           be needed for claims or support recovery.
         </p>
       </section>
+
+      {message ? (
+        <section className="notice success-notice">
+          {message}
+        </section>
+      ) : null}
 
       <section className="panel">
         <h3>Tradie roster</h3>
@@ -118,11 +135,13 @@ export default async function UsersPage() {
                     <div className="row-actions">
                       <form action={resetVoiceUsage}>
                         <input type="hidden" name="userId" value={user.id} />
-                        <button className="button small-button" type="submit">Reset Voice</button>
+                        <input type="hidden" name="userName" value={user.name} />
+                        <ActionButton label="Reset Voice" />
                       </form>
                       <form action={resetInvoiceCount}>
                         <input type="hidden" name="userId" value={user.id} />
-                        <button className="button small-button" type="submit">Reset Invoices</button>
+                        <input type="hidden" name="userName" value={user.name} />
+                        <ActionButton label="Reset Invoices" />
                       </form>
                     </div>
                   </td>
