@@ -1,0 +1,1 @@
+"""InvoiceBot package."""

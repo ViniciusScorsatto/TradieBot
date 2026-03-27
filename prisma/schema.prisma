@@ -1,0 +1,188 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum PlanTier {
+  FREE
+  PAID
+}
+
+enum DraftStatus {
+  ACTIVE
+  GENERATED
+  ABANDONED
+}
+
+enum TicketType {
+  BUG
+  CLAIM
+  IMPROVEMENT
+  IDEA
+}
+
+enum TicketStatus {
+  OPEN
+  IN_PROGRESS
+  CLOSED
+}
+
+enum PaymentStatus {
+  PENDING
+  SUCCEEDED
+  FAILED
+}
+
+model User {
+  id                      String         @id @default(cuid())
+  telegramUserId          String         @unique
+  telegramHandle          String?
+  firstName               String?
+  lastName                String?
+  planTier                PlanTier       @default(FREE)
+  stripeCustomerId        String?        @unique
+  invoiceCountThisMonth   Int            @default(0)
+  paidInvoiceCredits      Int            @default(0)
+  joinedAt                DateTime       @default(now())
+  updatedAt               DateTime       @updatedAt
+  profile                 Profile?
+  clients                 Client[]
+  invoiceDrafts           InvoiceDraft[]
+  invoices                Invoice[]
+  tickets                 Ticket[]
+  payments                Payment[]
+}
+
+model Profile {
+  id                String    @id @default(cuid())
+  userId            String    @unique
+  companyName       String?
+  gstNumber         String?
+  email             String?
+  phone             String?
+  bankDetails       String?
+  logoUrl           String?
+  defaultTemplateId String    @default("classic-blue")
+  invoicePrefix     String    @default("INV")
+  nextInvoiceNumber Int       @default(1)
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  user              User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Client {
+  id          String   @id @default(cuid())
+  userId      String
+  name        String
+  company     String?
+  email       String?
+  phone       String?
+  address     String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  invoices    Invoice[]
+}
+
+model InvoiceDraft {
+  id              String        @id @default(cuid())
+  userId          String
+  clientId        String?
+  status          DraftStatus   @default(ACTIVE)
+  notes           String?
+  subtotalCents   Int           @default(0)
+  gstCents        Int           @default(0)
+  totalCents      Int           @default(0)
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  user            User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  items           InvoiceDraftItem[]
+}
+
+model InvoiceDraftItem {
+  id          String       @id @default(cuid())
+  draftId     String
+  description String
+  quantity    Float        @default(1)
+  unitPrice   Int
+  lineTotal   Int
+  createdAt   DateTime     @default(now())
+  draft       InvoiceDraft @relation(fields: [draftId], references: [id], onDelete: Cascade)
+}
+
+model Invoice {
+  id              String        @id @default(cuid())
+  userId          String
+  clientId        String?
+  profileSnapshot Json
+  invoiceNumber   String
+  templateId      String
+  subtotalCents   Int
+  gstCents        Int
+  totalCents      Int
+  notes           String?
+  pdfUrl          String?
+  createdAt       DateTime      @default(now())
+  user            User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  client          Client?       @relation(fields: [clientId], references: [id])
+  items           InvoiceItem[]
+}
+
+model InvoiceItem {
+  id          String   @id @default(cuid())
+  invoiceId   String
+  description String
+  quantity    Float
+  unitPrice   Int
+  lineTotal   Int
+  invoice     Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+}
+
+model Ticket {
+  id          String       @id @default(cuid())
+  userId      String
+  type        TicketType
+  status      TicketStatus @default(OPEN)
+  subject     String
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+  user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  messages    TicketMessage[]
+}
+
+model TicketMessage {
+  id         String   @id @default(cuid())
+  ticketId    String
+  sender      String
+  body        String
+  createdAt   DateTime @default(now())
+  ticket      Ticket   @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+}
+
+model Payment {
+  id                String        @id @default(cuid())
+  userId            String
+  stripeSessionId   String?       @unique
+  stripePaymentId   String?       @unique
+  amountCents       Int
+  creditsPurchased  Int
+  status            PaymentStatus @default(PENDING)
+  createdAt         DateTime      @default(now())
+  user              User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model AdminUser {
+  id                String   @id @default(cuid())
+  email             String   @unique
+  passwordHash      String
+  totpSecret        String?
+  recoveryCodes     Json?
+  failedLoginCount  Int      @default(0)
+  lockedUntil       DateTime?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+}

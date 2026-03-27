@@ -1,0 +1,22 @@
+{
+  "name": "invoicebot",
+  "private": true,
+  "workspaces": [
+    "dashboard",
+    "site",
+    "packages/shared"
+  ],
+  "scripts": {
+    "dev:dashboard": "npm run dev --workspace dashboard",
+    "dev:site": "npm run dev --workspace site",
+    "build": "npm run build --workspace @invoicebot/shared && npm run build --workspace dashboard && npm run build --workspace site",
+    "lint": "npm run lint --workspace dashboard && npm run lint --workspace site",
+    "prisma:generate": "npx prisma generate",
+    "prisma:migrate": "npx prisma migrate dev",
+    "prisma:deploy": "npx prisma migrate deploy"
+  },
+  "devDependencies": {
+    "prisma": "^6.6.0",
+    "typescript": "^5.6.3"
+  }
+}

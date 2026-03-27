@@ -1,0 +1,19 @@
+[build]
+builder = "NIXPACKS"
+
+[[services]]
+name = "invoicebot-site"
+root = "site"
+
+[[services]]
+name = "invoicebot-dashboard"
+root = "dashboard"
+
+[[services]]
+name = "invoicebot-bot"
+root = "bot"
+
+[[services]]
+name = "invoicebot-quota-reset"
+root = "."
+startCommand = "python3 scripts/reset_monthly_quota.py"

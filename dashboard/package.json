@@ -1,0 +1,26 @@
+{
+  "name": "dashboard",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "next dev --port 3000",
+    "build": "next build",
+    "start": "next start --port 3000",
+    "lint": "next lint"
+  },
+  "dependencies": {
+    "@auth/core": "^0.37.2",
+    "@invoicebot/shared": "*",
+    "@prisma/client": "^6.6.0",
+    "bcryptjs": "^2.4.3",
+    "next": "^14.2.24",
+    "next-auth": "^5.0.0-beta.25",
+    "otplib": "^12.0.1",
+    "qrcode": "^1.5.4",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "stripe": "^17.7.0",
+    "zod": "^3.24.2"
+  }
+}
