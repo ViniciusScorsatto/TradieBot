@@ -1,4 +1,4 @@
-import { pricing } from "@invoicebot/shared";
+import { pricing, siteConfig } from "@invoicebot/shared";
 
 function checkoutMessage(checkout?: string, type?: string) {
   const target = type === "voice" ? "voice credits" : "invoice credits";
@@ -52,6 +52,17 @@ export default function PricingPage({
           <p>
             Unlock another {pricing.paidBlockSize} invoices whenever you hit the monthly limit.
             Voice is positioned as a premium-metered feature after the free allowance.
+          </p>
+          <div className="pricingActions">
+            <a className="cta" href={siteConfig.botDeepLink} target="_blank" rel="noreferrer">
+              Buy {pricing.paidBlockSize} invoices in Telegram
+            </a>
+            <a className="secondary" href={siteConfig.botDeepLink} target="_blank" rel="noreferrer">
+              Buy 100 voice notes in Telegram
+            </a>
+          </div>
+          <p className="pricingHint">
+            Secure checkout opens from the Telegram bot so your credits can be applied to the right account.
           </p>
         </article>
       </div>
