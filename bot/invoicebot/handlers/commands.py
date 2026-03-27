@@ -24,6 +24,16 @@ def _repo(context: ContextTypes.DEFAULT_TYPE) -> Repository:
     return context.application.bot_data["repo"]
 
 
+def _voice_limit_keyboard(settings) -> InlineKeyboardMarkup:
+    rows: list[list[InlineKeyboardButton]] = [[InlineKeyboardButton("Keep with text", callback_data="voice_continue_text")]]
+    pricing_url = settings.marketing_site_url.strip().rstrip("/")
+    if pricing_url:
+        rows.append([InlineKeyboardButton("Unlock voice", url=f"{pricing_url}/pricing")])
+    else:
+        rows.append([InlineKeyboardButton("Unlock voice", callback_data="voice_upgrade_info")])
+    return InlineKeyboardMarkup(rows)
+
+
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     await update.message.reply_text(
         "InvoiceBot helps tradies create invoices from voice or text in Telegram.\n\n"
@@ -326,7 +336,9 @@ async def _handle_voice_message(update: Update, context: ContextTypes.DEFAULT_TY
     used = repo.voice_count_this_month(user_id)
     if used >= settings.free_voice_transcriptions_per_month:
         await message.reply_text(
-            "You have used your free monthly voice transcription allowance. Please type the line items for now."
+            "You’ve used your free monthly voice transcriptions.\n\n"
+            "You can keep going by typing the line items, or unlock more voice transcriptions to keep invoicing by voice.",
+            reply_markup=_voice_limit_keyboard(settings),
         )
         return
 
@@ -370,6 +382,22 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 
     if query.data == "edit_draft":
         await query.edit_message_text("Draft still open. Send more line items and run /generate again.")
+        return
+
+    if query.data == "voice_continue_text":
+        await query.edit_message_text(
+            "Text mode is still available in this draft.\n\n"
+            "Send line items like:\n"
+            "Labour x 2 at $95\n"
+            "Materials $45"
+        )
+        return
+
+    if query.data == "voice_upgrade_info":
+        await query.edit_message_text(
+            "Voice is a premium add-on.\n\n"
+            "Keep going with text for now, and we’ll wire direct in-bot checkout here next."
+        )
         return
 
     if query.data == "confirm_generate":
