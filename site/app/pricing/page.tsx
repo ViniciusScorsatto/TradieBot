@@ -1,6 +1,28 @@
 import { pricing } from "@invoicebot/shared";
 
-export default function PricingPage() {
+function checkoutMessage(checkout?: string, type?: string) {
+  const target = type === "voice" ? "voice credits" : "invoice credits";
+  if (checkout === "success") {
+    return {
+      tone: "success",
+      body: `Payment received. Your ${target} should unlock shortly. Head back to Telegram and continue where you left off.`
+    };
+  }
+  if (checkout === "cancelled") {
+    return {
+      tone: "warning",
+      body: `Checkout was cancelled. You can keep going with the free workflow now and come back to unlock ${target} later.`
+    };
+  }
+  return null;
+}
+
+export default function PricingPage({
+  searchParams
+}: {
+  searchParams?: { checkout?: string; type?: string };
+}) {
+  const message = checkoutMessage(searchParams?.checkout, searchParams?.type);
   return (
     <main className="container section">
       <div className="sectionHead">
@@ -9,6 +31,11 @@ export default function PricingPage() {
           <p>Keep the buying decision easy: generous free usage, then tiny step-up pricing for heavier users.</p>
         </div>
       </div>
+      {message ? (
+        <section className={`siteNotice ${message.tone === "success" ? "siteNoticeSuccess" : "siteNoticeWarning"}`}>
+          {message.body}
+        </section>
+      ) : null}
       <div className="pricingLayout">
         <article className="priceCard">
           <h3>Free every month</h3>

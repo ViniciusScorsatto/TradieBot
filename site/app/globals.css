@@ -187,6 +187,26 @@ a {
   color: var(--muted);
 }
 
+.siteNotice {
+  margin-bottom: 20px;
+  padding: 18px 20px;
+  border-radius: 20px;
+  border: 1px solid var(--line);
+  box-shadow: var(--shadow);
+}
+
+.siteNoticeSuccess {
+  background: rgba(31, 111, 95, 0.12);
+  border-color: rgba(31, 111, 95, 0.24);
+  color: #164e43;
+}
+
+.siteNoticeWarning {
+  background: rgba(210, 102, 24, 0.12);
+  border-color: rgba(126, 50, 16, 0.2);
+  color: var(--brand-deep);
+}
+
 .featureGrid,
 .templateGrid,
 .faqGrid {
