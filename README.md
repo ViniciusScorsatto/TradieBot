@@ -43,7 +43,7 @@ Telegram-first invoicing product for tradies with:
 ## Product Notes
 
 - Text invoicing is the default low-friction path.
-- Voice invoicing launches with a small free monthly allowance and strict guardrails.
+- Voice invoicing launches with `20` free monthly transcriptions, a `60` second cap per note, and strict guardrails.
 - Voice is intended to evolve into a premium-metered feature rather than an unlimited free capability.
 
 ## Railway

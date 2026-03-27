@@ -49,8 +49,8 @@ export const pricing = {
   warningThreshold: 8,
   paidBlockSize: 10,
   paidBlockPriceNzd: 5,
-  freeVoiceTranscriptionsPerMonth: 3,
-  voiceNoteMaxSeconds: 90
+  freeVoiceTranscriptionsPerMonth: 20,
+  voiceNoteMaxSeconds: 60
 };
 
 export const siteConfig = {

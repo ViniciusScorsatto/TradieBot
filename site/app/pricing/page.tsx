@@ -15,7 +15,8 @@ export default function PricingPage() {
           <div className="priceValue">{pricing.freeInvoicesPerMonth}</div>
           <p>
             Every tradie gets {pricing.freeInvoicesPerMonth} invoices per month plus{" "}
-            {pricing.freeVoiceTranscriptionsPerMonth} free voice transcriptions before any payment is required.
+            {pricing.freeVoiceTranscriptionsPerMonth} free voice transcriptions up to {pricing.voiceNoteMaxSeconds} seconds each
+            before any payment is required.
           </p>
         </article>
         <article className="priceCard">

@@ -15,8 +15,8 @@ class Settings:
     warning_threshold: int = 8
     free_invoice_limit: int = 10
     paid_invoice_block: int = 10
-    free_voice_transcriptions_per_month: int = 3
-    voice_note_max_seconds: int = 90
+    free_voice_transcriptions_per_month: int = 20
+    voice_note_max_seconds: int = 60
 
     @classmethod
     def from_env(cls) -> "Settings":
@@ -27,6 +27,6 @@ class Settings:
             stripe_secret_key=os.getenv("STRIPE_SECRET_KEY", ""),
             stripe_price_id=os.getenv("STRIPE_PRICE_ID", ""),
             marketing_site_url=os.getenv("MARKETING_SITE_URL", ""),
-            free_voice_transcriptions_per_month=int(os.getenv("FREE_VOICE_TRANSCRIPTIONS_PER_MONTH", "3")),
-            voice_note_max_seconds=int(os.getenv("VOICE_NOTE_MAX_SECONDS", "90")),
+            free_voice_transcriptions_per_month=int(os.getenv("FREE_VOICE_TRANSCRIPTIONS_PER_MONTH", "20")),
+            voice_note_max_seconds=int(os.getenv("VOICE_NOTE_MAX_SECONDS", "60")),
         )

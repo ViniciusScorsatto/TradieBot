@@ -15,13 +15,13 @@ Voice is a core differentiator, but it should not be an unlimited free feature.
 
 - Keep text invoicing available as the default path
 - Launch voice support with OpenAI transcription
-- Include a small free monthly voice allowance
+- Include a generous free monthly voice allowance
 - Apply hard guardrails to prevent abuse and cost spikes
 
 ### Recommended guardrails
 
 - Only allow transcription during an active invoice session
-- Cap each voice note to `90` seconds
+- Cap each voice note to `60` seconds
 - Reject oversized or unsupported audio uploads
 - Rate-limit voice transcriptions per user
 - Track monthly voice usage separately from invoice quota
@@ -35,6 +35,6 @@ Voice is a core differentiator, but it should not be an unlimited free feature.
 
 ## Suggested First Numbers
 
-- `3` free voice transcriptions per month
-- `90` seconds maximum per voice note
+- `20` free voice transcriptions per month
+- `60` seconds maximum per voice note
 - Text entry remains available even when voice allowance is exhausted
