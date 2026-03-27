@@ -10,7 +10,8 @@ class Settings:
     database_url: str
     openai_api_key: str
     stripe_secret_key: str
-    stripe_price_id: str
+    stripe_invoice_price_id: str
+    stripe_voice_price_id: str
     marketing_site_url: str
     warning_threshold: int = 8
     free_invoice_limit: int = 10
@@ -25,7 +26,8 @@ class Settings:
             database_url=os.getenv("DATABASE_URL", ""),
             openai_api_key=os.getenv("OPENAI_API_KEY", ""),
             stripe_secret_key=os.getenv("STRIPE_SECRET_KEY", ""),
-            stripe_price_id=os.getenv("STRIPE_PRICE_ID", ""),
+            stripe_invoice_price_id=os.getenv("STRIPE_INVOICE_PRICE_ID", ""),
+            stripe_voice_price_id=os.getenv("STRIPE_VOICE_PRICE_ID", ""),
             marketing_site_url=os.getenv("MARKETING_SITE_URL", ""),
             free_voice_transcriptions_per_month=int(os.getenv("FREE_VOICE_TRANSCRIPTIONS_PER_MONTH", "20")),
             voice_note_max_seconds=int(os.getenv("VOICE_NOTE_MAX_SECONDS", "60")),

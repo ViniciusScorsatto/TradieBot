@@ -73,7 +73,8 @@ Set these at the project level if multiple services need them:
 - `OPENAI_API_KEY`
 - `STRIPE_SECRET_KEY`
 - `STRIPE_WEBHOOK_SECRET`
-- `STRIPE_PRICE_ID`
+- `STRIPE_INVOICE_PRICE_ID`
+- `STRIPE_VOICE_PRICE_ID`
 - `ADMIN_EMAIL`
 - `ADMIN_PASSWORD_HASH`
 - `ADMIN_TOTP_SECRET`
@@ -86,7 +87,8 @@ Set these at the project level if multiple services need them:
 - `TELEGRAM_TOKEN`
 - `OPENAI_API_KEY`
 - `STRIPE_SECRET_KEY`
-- `STRIPE_PRICE_ID`
+- `STRIPE_INVOICE_PRICE_ID`
+- `STRIPE_VOICE_PRICE_ID`
 - `DATABASE_URL`
 
 ### Dashboard
