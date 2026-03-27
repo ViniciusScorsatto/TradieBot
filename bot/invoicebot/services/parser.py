@@ -19,6 +19,17 @@ NUMBER_WORDS = {
     "ten": "10",
 }
 
+TENS_WORDS = {
+    "twenty": 20,
+    "thirty": 30,
+    "forty": 40,
+    "fifty": 50,
+    "sixty": 60,
+    "seventy": 70,
+    "eighty": 80,
+    "ninety": 90,
+}
+
 QTY_FIRST_RE = re.compile(
     r"^\s*(?P<description>.+?)\s*(?:x|×)\s*(?P<quantity>\d+(?:\.\d+)?)\s*(?:at\s*)?\$?(?P<price>\d+(?:\.\d{1,2})?)\s*$",
     re.IGNORECASE,
@@ -29,8 +40,18 @@ QTY_NATURAL_RE = re.compile(
     re.IGNORECASE,
 )
 
+QTY_COMMA_PRICE_RE = re.compile(
+    r"^\s*(?P<description>.+?)\s*(?:x|×)\s*(?P<quantity>\d+(?:\.\d+)?)\s*,\s*\$?(?P<price>\d+(?:\.\d{1,2})?)\s*$",
+    re.IGNORECASE,
+)
+
 EACH_RE = re.compile(
     r"^\s*(?P<description>.+?)\s+(?P<quantity>\d+(?:\.\d+)?)\s*(?:times?)\s*(?:at\s*)?\$?(?P<price>\d+(?:\.\d{1,2})?)\s*(?:dollars?)?\s*(?:each)?\s*$",
+    re.IGNORECASE,
+)
+
+TIMES_BEFORE_QTY_RE = re.compile(
+    r"^\s*(?P<description>.+?)\s+times\s+(?P<quantity>\d+(?:\.\d+)?)\s*,?\s*\$?(?P<price>\d+(?:\.\d{1,2})?)(?:\s*(?:dollars?)?)?\s*$",
     re.IGNORECASE,
 )
 
@@ -42,11 +63,24 @@ PRICE_ONLY_RE = re.compile(
 
 def _normalize_spoken_numbers(text: str) -> str:
     normalized = text
+    normalized = re.sub(r"\bonce\b", "x 1", normalized, flags=re.IGNORECASE)
+    normalized = re.sub(r"\btwice\b", "x 2", normalized, flags=re.IGNORECASE)
+    for word, base in TENS_WORDS.items():
+        normalized = re.sub(
+            rf"\b{word}(?:[-\s]+(one|two|three|four|five|six|seven|eight|nine))\b",
+            lambda match: str(base + int(NUMBER_WORDS[match.group(1).lower()])),
+            normalized,
+            flags=re.IGNORECASE,
+        )
+        normalized = re.sub(rf"\b{word}\b", str(base), normalized, flags=re.IGNORECASE)
     for word, value in NUMBER_WORDS.items():
         normalized = re.sub(rf"\b{word}\b", value, normalized, flags=re.IGNORECASE)
     normalized = re.sub(r"\b(\d+)\s+times\b", r"\1 x", normalized, flags=re.IGNORECASE)
+    normalized = re.sub(r"\btimes\s+(\d+)\b", r"x \1", normalized, flags=re.IGNORECASE)
+    normalized = re.sub(r"\bx\s+(\d+)\s*,\s*\$?(\d+(?:\.\d{1,2})?)\b", r"x \1 at $\2", normalized, flags=re.IGNORECASE)
     normalized = re.sub(r"\beach\b", "", normalized, flags=re.IGNORECASE)
     normalized = re.sub(r"\bdollars?\b", "", normalized, flags=re.IGNORECASE)
+    normalized = re.sub(r"[.!?]+$", "", normalized)
     normalized = re.sub(r"\s+", " ", normalized).strip()
     return normalized
 
@@ -64,7 +98,7 @@ def parse_line_items(text: str) -> list[InvoiceItem]:
     for raw_line in [line.strip("-• ").strip() for line in text.splitlines() if line.strip()]:
         normalized = _normalize_spoken_numbers(raw_line)
 
-        for pattern in (QTY_FIRST_RE, QTY_NATURAL_RE, EACH_RE):
+        for pattern in (QTY_FIRST_RE, QTY_COMMA_PRICE_RE, QTY_NATURAL_RE, EACH_RE, TIMES_BEFORE_QTY_RE):
             match = pattern.match(normalized)
             if match:
                 items.append(

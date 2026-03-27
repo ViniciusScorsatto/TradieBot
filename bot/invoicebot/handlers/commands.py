@@ -289,7 +289,12 @@ async def _handle_voice_message(update: Update, context: ContextTypes.DEFAULT_TY
         await message.reply_text(
             "I transcribed the voice note, but couldn't turn it into invoice line items.\n\n"
             f"Transcript:\n{transcript}\n\n"
-            "Please edit the wording or type the items manually."
+            "You are still in the same invoice draft. Send another voice note or type the item manually.\n\n"
+            "Try phrases like:\n"
+            "`Labour x 2 at $95`\n"
+            "`Labour twice at $95`\n"
+            "`Materials $45`",
+            parse_mode="Markdown",
         )
 
 
