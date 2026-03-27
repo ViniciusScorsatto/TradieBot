@@ -213,6 +213,18 @@ a {
   cursor: pointer;
 }
 
+.small-button {
+  padding: 10px 12px;
+  border-radius: 12px;
+  font-size: 0.85rem;
+}
+
+.row-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
 @media (max-width: 980px) {
   .shell {
     grid-template-columns: 1fr;
