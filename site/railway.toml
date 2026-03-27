@@ -1,0 +1,16 @@
+[build]
+builder = "RAILPACK"
+buildCommand = "npm run build:site"
+watchPatterns = [
+  "/site/**",
+  "/packages/shared/**",
+  "/package.json",
+  "/tsconfig.base.json"
+]
+
+[deploy]
+startCommand = "npm run start:site"
+healthcheckPath = "/api/health"
+healthcheckTimeout = 120
+restartPolicyType = "ALWAYS"
+restartPolicyMaxRetries = 10

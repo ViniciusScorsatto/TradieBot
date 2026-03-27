@@ -38,3 +38,13 @@ Telegram-first invoicing product for tradies with:
 - `site/` launch-ready public marketing site
 - `packages/shared/` template catalog and shared app constants
 - `scripts/reset_monthly_quota.py` Railway cron job target
+
+## Railway
+
+Railway deployment is configured per service because Railway config-as-code is applied one service at a time.
+
+- Bot config: [bot/railway.toml](/Users/viniciusscorsatto/Desktop/AI%20Projects/Nz%20Fuel/bot/railway.toml)
+- Dashboard config: [dashboard/railway.toml](/Users/viniciusscorsatto/Desktop/AI%20Projects/Nz%20Fuel/dashboard/railway.toml)
+- Site config: [site/railway.toml](/Users/viniciusscorsatto/Desktop/AI%20Projects/Nz%20Fuel/site/railway.toml)
+- Cron config: [scripts/railway-quota-reset.toml](/Users/viniciusscorsatto/Desktop/AI%20Projects/Nz%20Fuel/scripts/railway-quota-reset.toml)
+- Setup guide: [docs/railway.md](/Users/viniciusscorsatto/Desktop/AI%20Projects/Nz%20Fuel/docs/railway.md)

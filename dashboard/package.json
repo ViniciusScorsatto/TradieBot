@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "next dev --port 3000",
     "build": "next build",
-    "start": "next start --port 3000",
+    "start": "sh -c 'next start --port ${PORT:-3000}'",
     "lint": "next lint"
   },
   "dependencies": {

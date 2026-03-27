@@ -1,6 +1,7 @@
 {
   "name": "invoicebot",
   "private": true,
+  "packageManager": "npm@10.8.1",
   "workspaces": [
     "dashboard",
     "site",
@@ -9,6 +10,10 @@
   "scripts": {
     "dev:dashboard": "npm run dev --workspace dashboard",
     "dev:site": "npm run dev --workspace site",
+    "build:dashboard": "npm run build --workspace @invoicebot/shared && npm run build --workspace dashboard",
+    "build:site": "npm run build --workspace @invoicebot/shared && npm run build --workspace site",
+    "start:dashboard": "npm run start --workspace dashboard",
+    "start:site": "npm run start --workspace site",
     "build": "npm run build --workspace @invoicebot/shared && npm run build --workspace dashboard && npm run build --workspace site",
     "lint": "npm run lint --workspace dashboard && npm run lint --workspace site",
     "prisma:generate": "npx prisma generate",

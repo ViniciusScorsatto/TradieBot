@@ -1,0 +1,11 @@
+[build]
+builder = "RAILPACK"
+watchPatterns = [
+  "/scripts/reset_monthly_quota.py",
+  "/scripts/railway-quota-reset.toml"
+]
+
+[deploy]
+startCommand = "python3 scripts/reset_monthly_quota.py"
+restartPolicyType = "NEVER"
+cronSchedule = "5 12 * * *"
