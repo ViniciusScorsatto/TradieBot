@@ -3,6 +3,26 @@ import { NextRequest, NextResponse } from "next/server";
 import { randomUUID } from "crypto";
 import { prisma } from "../../../../lib/prisma";
 
+async function sendTelegramMessage(telegramUserId: string, text: string) {
+  const token = process.env.TELEGRAM_TOKEN;
+  if (!token) {
+    return false;
+  }
+
+  const response = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      chat_id: telegramUserId,
+      text
+    })
+  });
+
+  return response.ok;
+}
+
 async function ensureBillingSchema() {
   await prisma.$executeRawUnsafe(
     "ALTER TABLE users ADD COLUMN IF NOT EXISTS paid_voice_credits INTEGER NOT NULL DEFAULT 0"
@@ -102,6 +122,10 @@ async function fulfillCheckout(session: Stripe.Checkout.Session) {
           updated_at = NOW()
       WHERE id = ${userId}
     `;
+    await sendTelegramMessage(
+      String(telegramUserId),
+      `Payment received. ${creditsPurchased} voice notes have been added to your account. You can keep invoicing by voice now.`
+    );
     return { ok: true, action: "unlock_voice_credits" };
   }
 
@@ -112,6 +136,10 @@ async function fulfillCheckout(session: Stripe.Checkout.Session) {
         updated_at = NOW()
     WHERE id = ${userId}
   `;
+  await sendTelegramMessage(
+    String(telegramUserId),
+    `Payment received. ${creditsPurchased} invoice credits have been added to your account. You can keep generating invoices now.`
+  );
   return { ok: true, action: "unlock_invoice_credits" };
 }
 
