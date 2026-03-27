@@ -14,7 +14,7 @@ class Settings:
     marketing_site_url: str
     warning_threshold: int = 8
     free_invoice_limit: int = 10
-    paid_invoice_block: int = 10
+    paid_invoice_block: int = 20
     free_voice_transcriptions_per_month: int = 20
     voice_note_max_seconds: int = 60
 

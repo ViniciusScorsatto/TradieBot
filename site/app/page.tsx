@@ -130,7 +130,7 @@ export default function HomePage() {
             <div className="priceValue">10 free</div>
             <p>
               Start free every month. Voice also includes {pricing.freeVoiceTranscriptionsPerMonth} free transcriptions,
-              then unlock another 10 invoices for NZD ${pricing.paidBlockPriceNzd}.
+              then unlock another {pricing.paidBlockSize} invoices for NZD ${pricing.paidBlockPriceNzd}.
             </p>
           </article>
           <article className="priceCard">

@@ -47,7 +47,7 @@ export const invoiceTemplates: InvoiceTemplate[] = [
 export const pricing = {
   freeInvoicesPerMonth: 10,
   warningThreshold: 8,
-  paidBlockSize: 10,
+  paidBlockSize: 20,
   paidBlockPriceNzd: 5,
   freeVoiceTranscriptionsPerMonth: 20,
   voiceNoteMaxSeconds: 60

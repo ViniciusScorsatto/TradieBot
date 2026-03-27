@@ -3,7 +3,7 @@
 ## Current Product Shape
 
 - `10` free invoices per month
-- `NZD 5` unlocks another block of `10` invoices
+- `NZD 5` unlocks another block of `20` invoices
 - `5` curated invoice templates included for all users
 - Telegram-first workflow with admin dashboard and marketing site
 
