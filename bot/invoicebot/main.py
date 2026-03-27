@@ -19,7 +19,7 @@ from invoicebot.handlers.commands import (
     support_command,
     template_command,
 )
-from invoicebot.services.storage import InMemoryRepository
+from invoicebot.services.storage import InMemoryRepository, PostgresRepository
 
 
 logging.basicConfig(level=logging.INFO)
@@ -29,7 +29,7 @@ def build_application() -> Application:
     settings = Settings.from_env()
     application = Application.builder().token(settings.telegram_token).build()
     application.bot_data["settings"] = settings
-    application.bot_data["repo"] = InMemoryRepository()
+    application.bot_data["repo"] = PostgresRepository(settings.database_url) if settings.database_url else InMemoryRepository()
 
     application.add_handler(CommandHandler("start", start_command))
     application.add_handler(CommandHandler("invoice", invoice_command))

@@ -1,15 +1,38 @@
 from __future__ import annotations
 
+import json
+import os
 from collections import defaultdict
 from dataclasses import replace
-from typing import DefaultDict
+from datetime import UTC, datetime
+from typing import Any, DefaultDict, Protocol
 from uuid import uuid4
 
-from invoicebot.models import Client, InvoiceDraft, Profile, SupportTicket
+from invoicebot.models import Client, InvoiceDraft, InvoiceItem, Profile, SupportTicket
+
+
+def _utcnow() -> datetime:
+    return datetime.now(UTC)
+
+
+class Repository(Protocol):
+    def get_or_create_profile(self, user_id: str) -> Profile: ...
+    def save_profile(self, user_id: str, profile: Profile) -> Profile: ...
+    def create_draft(self, user_id: str) -> InvoiceDraft: ...
+    def get_draft(self, user_id: str) -> InvoiceDraft | None: ...
+    def save_draft(self, draft: InvoiceDraft) -> InvoiceDraft: ...
+    def finalize_draft(self, user_id: str) -> InvoiceDraft | None: ...
+    def add_client(self, user_id: str, name: str, company: str = "", email: str = "", phone: str = "", address: str = "") -> Client: ...
+    def list_clients(self, user_id: str) -> list[Client]: ...
+    def list_history(self, user_id: str) -> list[InvoiceDraft]: ...
+    def record_ticket(self, ticket: SupportTicket) -> None: ...
+    def invoice_count_this_month(self, user_id: str) -> int: ...
+    def paid_credits(self, user_id: str) -> int: ...
+    def consume_paid_credit_if_needed(self, user_id: str, free_limit: int) -> None: ...
 
 
 class InMemoryRepository:
-    """A lightweight repository so the project runs before DB wiring is complete."""
+    """Fallback repository for local development when DATABASE_URL is not set."""
 
     def __init__(self) -> None:
         self.profiles: dict[str, Profile] = {}
@@ -64,11 +87,619 @@ class InMemoryRepository:
     def record_ticket(self, ticket: SupportTicket) -> None:
         self.tickets[ticket.user_id].append(ticket)
 
-    def available_quota(self, user_id: str, free_limit: int) -> int:
-        free_remaining = max(free_limit - self.invoice_counts[user_id], 0)
-        return free_remaining + self.credits[user_id]
+    def invoice_count_this_month(self, user_id: str) -> int:
+        return self.invoice_counts[user_id]
+
+    def paid_credits(self, user_id: str) -> int:
+        return self.credits[user_id]
 
     def consume_paid_credit_if_needed(self, user_id: str, free_limit: int) -> None:
         if self.invoice_counts[user_id] >= free_limit and self.credits[user_id] > 0:
             self.credits[user_id] -= 1
 
+
+class PostgresRepository:
+    def __init__(self, database_url: str | None = None) -> None:
+        self.database_url = database_url or os.getenv("DATABASE_URL", "")
+        if not self.database_url:
+            raise ValueError("DATABASE_URL is required for PostgresRepository")
+        self.ensure_schema()
+
+    def _connect(self) -> Any:
+        import psycopg
+        from psycopg.rows import dict_row
+
+        return psycopg.connect(self.database_url, row_factory=dict_row)
+
+    def ensure_schema(self) -> None:
+        statements = [
+            """
+            CREATE TABLE IF NOT EXISTS users (
+              id TEXT PRIMARY KEY,
+              telegram_user_id TEXT UNIQUE NOT NULL,
+              telegram_handle TEXT,
+              first_name TEXT,
+              last_name TEXT,
+              plan_tier TEXT NOT NULL DEFAULT 'FREE',
+              stripe_customer_id TEXT UNIQUE,
+              invoice_count_this_month INTEGER NOT NULL DEFAULT 0,
+              paid_invoice_credits INTEGER NOT NULL DEFAULT 0,
+              joined_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+              updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+            )
+            """,
+            """
+            CREATE TABLE IF NOT EXISTS profiles (
+              id TEXT PRIMARY KEY,
+              user_id TEXT UNIQUE NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+              company_name TEXT,
+              gst_number TEXT,
+              email TEXT,
+              phone TEXT,
+              bank_details TEXT,
+              logo_url TEXT,
+              default_template_id TEXT NOT NULL DEFAULT 'classic-blue',
+              invoice_prefix TEXT NOT NULL DEFAULT 'INV',
+              next_invoice_number INTEGER NOT NULL DEFAULT 1,
+              created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+              updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+            )
+            """,
+            """
+            CREATE TABLE IF NOT EXISTS clients (
+              id TEXT PRIMARY KEY,
+              user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+              name TEXT NOT NULL,
+              company TEXT,
+              email TEXT,
+              phone TEXT,
+              address TEXT,
+              created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+              updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+            )
+            """,
+            """
+            CREATE TABLE IF NOT EXISTS invoice_drafts (
+              id TEXT PRIMARY KEY,
+              user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+              client_id TEXT,
+              status TEXT NOT NULL DEFAULT 'ACTIVE',
+              notes TEXT,
+              subtotal_cents INTEGER NOT NULL DEFAULT 0,
+              gst_cents INTEGER NOT NULL DEFAULT 0,
+              total_cents INTEGER NOT NULL DEFAULT 0,
+              created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+              updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+            )
+            """,
+            """
+            CREATE TABLE IF NOT EXISTS invoice_draft_items (
+              id TEXT PRIMARY KEY,
+              draft_id TEXT NOT NULL REFERENCES invoice_drafts(id) ON DELETE CASCADE,
+              description TEXT NOT NULL,
+              quantity DOUBLE PRECISION NOT NULL DEFAULT 1,
+              unit_price INTEGER NOT NULL,
+              line_total INTEGER NOT NULL,
+              created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+            )
+            """,
+            """
+            CREATE TABLE IF NOT EXISTS invoices (
+              id TEXT PRIMARY KEY,
+              user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+              client_id TEXT,
+              profile_snapshot JSONB NOT NULL,
+              invoice_number TEXT NOT NULL,
+              template_id TEXT NOT NULL,
+              subtotal_cents INTEGER NOT NULL,
+              gst_cents INTEGER NOT NULL,
+              total_cents INTEGER NOT NULL,
+              notes TEXT,
+              pdf_url TEXT,
+              created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+            )
+            """,
+            """
+            CREATE TABLE IF NOT EXISTS invoice_items (
+              id TEXT PRIMARY KEY,
+              invoice_id TEXT NOT NULL REFERENCES invoices(id) ON DELETE CASCADE,
+              description TEXT NOT NULL,
+              quantity DOUBLE PRECISION NOT NULL,
+              unit_price INTEGER NOT NULL,
+              line_total INTEGER NOT NULL
+            )
+            """,
+            """
+            CREATE TABLE IF NOT EXISTS tickets (
+              id TEXT PRIMARY KEY,
+              user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+              type TEXT NOT NULL,
+              status TEXT NOT NULL DEFAULT 'OPEN',
+              subject TEXT NOT NULL,
+              created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+              updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+            )
+            """,
+            """
+            CREATE TABLE IF NOT EXISTS ticket_messages (
+              id TEXT PRIMARY KEY,
+              ticket_id TEXT NOT NULL REFERENCES tickets(id) ON DELETE CASCADE,
+              sender TEXT NOT NULL,
+              body TEXT NOT NULL,
+              created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+            )
+            """,
+        ]
+        with self._connect() as conn, conn.cursor() as cur:
+            for statement in statements:
+                cur.execute(statement)
+            conn.commit()
+
+    def _ensure_user(self, user_id: str) -> dict:
+        with self._connect() as conn, conn.cursor() as cur:
+            cur.execute("SELECT * FROM users WHERE telegram_user_id = %s", (user_id,))
+            user = cur.fetchone()
+            if user:
+                return user
+            user_row = {
+                "id": str(uuid4()),
+                "telegram_user_id": user_id,
+            }
+            cur.execute(
+                """
+                INSERT INTO users (id, telegram_user_id)
+                VALUES (%s, %s)
+                RETURNING *
+                """,
+                (user_row["id"], user_row["telegram_user_id"]),
+            )
+            created = cur.fetchone()
+            conn.commit()
+            return created
+
+    def _row_to_profile(self, row: dict | None) -> Profile:
+        if not row:
+            return Profile()
+        return Profile(
+            company_name=row.get("company_name") or "",
+            gst_number=row.get("gst_number") or "",
+            email=row.get("email") or "",
+            phone=row.get("phone") or "",
+            bank_details=row.get("bank_details") or "",
+            logo_url=row.get("logo_url") or "",
+            default_template_id=row.get("default_template_id") or "classic-blue",
+            invoice_prefix=row.get("invoice_prefix") or "INV",
+            next_invoice_number=row.get("next_invoice_number") or 1,
+        )
+
+    def _row_to_client(self, row: dict) -> Client:
+        return Client(
+            id=row["id"],
+            name=row["name"],
+            company=row.get("company") or "",
+            email=row.get("email") or "",
+            phone=row.get("phone") or "",
+            address=row.get("address") or "",
+        )
+
+    def _active_draft_row(self, cur: Any, user_db_id: str) -> dict | None:
+        cur.execute(
+            """
+            SELECT * FROM invoice_drafts
+            WHERE user_id = %s AND status = 'ACTIVE'
+            ORDER BY updated_at DESC
+            LIMIT 1
+            """,
+            (user_db_id,),
+        )
+        return cur.fetchone()
+
+    def _load_draft_items(self, cur: Any, draft_id: str) -> list[InvoiceItem]:
+        cur.execute(
+            """
+            SELECT description, quantity, unit_price
+            FROM invoice_draft_items
+            WHERE draft_id = %s
+            ORDER BY created_at ASC
+            """,
+            (draft_id,),
+        )
+        return [
+            InvoiceItem(
+                description=row["description"],
+                quantity=float(row["quantity"]),
+                unit_price_cents=int(row["unit_price"]),
+            )
+            for row in cur.fetchall()
+        ]
+
+    def get_or_create_profile(self, user_id: str) -> Profile:
+        user = self._ensure_user(user_id)
+        with self._connect() as conn, conn.cursor() as cur:
+            cur.execute("SELECT * FROM profiles WHERE user_id = %s", (user["id"],))
+            profile = cur.fetchone()
+            if profile:
+                return self._row_to_profile(profile)
+
+            cur.execute(
+                """
+                INSERT INTO profiles (id, user_id)
+                VALUES (%s, %s)
+                RETURNING *
+                """,
+                (str(uuid4()), user["id"]),
+            )
+            created = cur.fetchone()
+            conn.commit()
+            return self._row_to_profile(created)
+
+    def save_profile(self, user_id: str, profile: Profile) -> Profile:
+        user = self._ensure_user(user_id)
+        with self._connect() as conn, conn.cursor() as cur:
+            cur.execute("SELECT id FROM profiles WHERE user_id = %s", (user["id"],))
+            profile_row = cur.fetchone()
+            if profile_row:
+                cur.execute(
+                    """
+                    UPDATE profiles
+                    SET company_name = %s,
+                        gst_number = %s,
+                        email = %s,
+                        phone = %s,
+                        bank_details = %s,
+                        logo_url = %s,
+                        default_template_id = %s,
+                        invoice_prefix = %s,
+                        next_invoice_number = %s,
+                        updated_at = NOW()
+                    WHERE user_id = %s
+                    """,
+                    (
+                        profile.company_name,
+                        profile.gst_number,
+                        profile.email,
+                        profile.phone,
+                        profile.bank_details,
+                        profile.logo_url,
+                        profile.default_template_id,
+                        profile.invoice_prefix,
+                        profile.next_invoice_number,
+                        user["id"],
+                    ),
+                )
+            else:
+                cur.execute(
+                    """
+                    INSERT INTO profiles (
+                        id, user_id, company_name, gst_number, email, phone,
+                        bank_details, logo_url, default_template_id, invoice_prefix, next_invoice_number
+                    )
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    """,
+                    (
+                        str(uuid4()),
+                        user["id"],
+                        profile.company_name,
+                        profile.gst_number,
+                        profile.email,
+                        profile.phone,
+                        profile.bank_details,
+                        profile.logo_url,
+                        profile.default_template_id,
+                        profile.invoice_prefix,
+                        profile.next_invoice_number,
+                    ),
+                )
+            conn.commit()
+        return profile
+
+    def create_draft(self, user_id: str) -> InvoiceDraft:
+        user = self._ensure_user(user_id)
+        with self._connect() as conn, conn.cursor() as cur:
+            existing = self._active_draft_row(cur, user["id"])
+            if existing:
+                cur.execute("DELETE FROM invoice_draft_items WHERE draft_id = %s", (existing["id"],))
+                cur.execute(
+                    """
+                    UPDATE invoice_drafts
+                    SET client_id = NULL, notes = '', subtotal_cents = 0, gst_cents = 0, total_cents = 0, updated_at = NOW()
+                    WHERE id = %s
+                    """,
+                    (existing["id"],),
+                )
+            else:
+                cur.execute(
+                    """
+                    INSERT INTO invoice_drafts (id, user_id)
+                    VALUES (%s, %s)
+                    """,
+                    (str(uuid4()), user["id"]),
+                )
+            conn.commit()
+        return InvoiceDraft(user_id=user_id)
+
+    def get_draft(self, user_id: str) -> InvoiceDraft | None:
+        user = self._ensure_user(user_id)
+        with self._connect() as conn, conn.cursor() as cur:
+            draft = self._active_draft_row(cur, user["id"])
+            if not draft:
+                return None
+            items = self._load_draft_items(cur, draft["id"])
+            return InvoiceDraft(
+                user_id=user_id,
+                items=items,
+                client_id=draft.get("client_id"),
+                notes=draft.get("notes") or "",
+                created_at=draft.get("created_at") or _utcnow(),
+            )
+
+    def save_draft(self, draft: InvoiceDraft) -> InvoiceDraft:
+        user = self._ensure_user(draft.user_id)
+        with self._connect() as conn, conn.cursor() as cur:
+            draft_row = self._active_draft_row(cur, user["id"])
+            draft_id = draft_row["id"] if draft_row else str(uuid4())
+            if draft_row:
+                cur.execute(
+                    """
+                    UPDATE invoice_drafts
+                    SET client_id = %s, notes = %s, subtotal_cents = %s, gst_cents = %s, total_cents = %s, updated_at = NOW()
+                    WHERE id = %s
+                    """,
+                    (
+                        draft.client_id,
+                        draft.notes,
+                        draft.subtotal_cents,
+                        draft.gst_cents,
+                        draft.total_cents,
+                        draft_id,
+                    ),
+                )
+                cur.execute("DELETE FROM invoice_draft_items WHERE draft_id = %s", (draft_id,))
+            else:
+                cur.execute(
+                    """
+                    INSERT INTO invoice_drafts (
+                        id, user_id, client_id, notes, subtotal_cents, gst_cents, total_cents
+                    )
+                    VALUES (%s, %s, %s, %s, %s, %s, %s)
+                    """,
+                    (
+                        draft_id,
+                        user["id"],
+                        draft.client_id,
+                        draft.notes,
+                        draft.subtotal_cents,
+                        draft.gst_cents,
+                        draft.total_cents,
+                    ),
+                )
+            for item in draft.items:
+                cur.execute(
+                    """
+                    INSERT INTO invoice_draft_items (id, draft_id, description, quantity, unit_price, line_total)
+                    VALUES (%s, %s, %s, %s, %s, %s)
+                    """,
+                    (
+                        str(uuid4()),
+                        draft_id,
+                        item.description,
+                        item.quantity,
+                        item.unit_price_cents,
+                        item.line_total_cents,
+                    ),
+                )
+            conn.commit()
+        return draft
+
+    def finalize_draft(self, user_id: str) -> InvoiceDraft | None:
+        user = self._ensure_user(user_id)
+        profile = self.get_or_create_profile(user_id)
+        with self._connect() as conn, conn.cursor() as cur:
+            draft_row = self._active_draft_row(cur, user["id"])
+            if not draft_row:
+                return None
+            items = self._load_draft_items(cur, draft_row["id"])
+            draft = InvoiceDraft(
+                user_id=user_id,
+                items=items,
+                client_id=draft_row.get("client_id"),
+                notes=draft_row.get("notes") or "",
+                created_at=draft_row.get("created_at") or _utcnow(),
+            )
+            invoice_id = str(uuid4())
+            invoice_number = f"{profile.invoice_prefix}-{profile.next_invoice_number:04d}"
+            cur.execute(
+                """
+                INSERT INTO invoices (
+                    id, user_id, client_id, profile_snapshot, invoice_number, template_id,
+                    subtotal_cents, gst_cents, total_cents, notes
+                )
+                VALUES (%s, %s, %s, %s::jsonb, %s, %s, %s, %s, %s, %s)
+                """,
+                (
+                    invoice_id,
+                    user["id"],
+                    draft.client_id,
+                    json.dumps(
+                        {
+                            "company_name": profile.company_name,
+                            "gst_number": profile.gst_number,
+                            "email": profile.email,
+                            "phone": profile.phone,
+                            "bank_details": profile.bank_details,
+                            "default_template_id": profile.default_template_id,
+                        }
+                    ),
+                    invoice_number,
+                    profile.default_template_id,
+                    draft.subtotal_cents,
+                    draft.gst_cents,
+                    draft.total_cents,
+                    draft.notes,
+                ),
+            )
+            for item in items:
+                cur.execute(
+                    """
+                    INSERT INTO invoice_items (id, invoice_id, description, quantity, unit_price, line_total)
+                    VALUES (%s, %s, %s, %s, %s, %s)
+                    """,
+                    (
+                        str(uuid4()),
+                        invoice_id,
+                        item.description,
+                        item.quantity,
+                        item.unit_price_cents,
+                        item.line_total_cents,
+                    ),
+                )
+            cur.execute("UPDATE invoice_drafts SET status = 'GENERATED', updated_at = NOW() WHERE id = %s", (draft_row["id"],))
+            cur.execute("UPDATE users SET invoice_count_this_month = invoice_count_this_month + 1, updated_at = NOW() WHERE id = %s", (user["id"],))
+            cur.execute(
+                """
+                UPDATE profiles
+                SET next_invoice_number = next_invoice_number + 1, updated_at = NOW()
+                WHERE user_id = %s
+                """,
+                (user["id"],),
+            )
+            conn.commit()
+            return draft
+
+    def add_client(self, user_id: str, name: str, company: str = "", email: str = "", phone: str = "", address: str = "") -> Client:
+        user = self._ensure_user(user_id)
+        client = Client(id=str(uuid4()), name=name, company=company, email=email, phone=phone, address=address)
+        with self._connect() as conn, conn.cursor() as cur:
+            cur.execute(
+                """
+                INSERT INTO clients (id, user_id, name, company, email, phone, address)
+                VALUES (%s, %s, %s, %s, %s, %s, %s)
+                """,
+                (client.id, user["id"], client.name, client.company, client.email, client.phone, client.address),
+            )
+            conn.commit()
+        return client
+
+    def list_clients(self, user_id: str) -> list[Client]:
+        user = self._ensure_user(user_id)
+        with self._connect() as conn, conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT id, name, company, email, phone, address
+                FROM clients
+                WHERE user_id = %s
+                ORDER BY created_at DESC
+                """,
+                (user["id"],),
+            )
+            return [self._row_to_client(row) for row in cur.fetchall()]
+
+    def list_history(self, user_id: str) -> list[InvoiceDraft]:
+        user = self._ensure_user(user_id)
+        with self._connect() as conn, conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT id, client_id, notes, created_at
+                FROM invoices
+                WHERE user_id = %s
+                ORDER BY created_at DESC
+                LIMIT 10
+                """,
+                (user["id"],),
+            )
+            invoices = cur.fetchall()
+            history: list[InvoiceDraft] = []
+            for invoice in invoices:
+                cur.execute(
+                    """
+                    SELECT description, quantity, unit_price
+                    FROM invoice_items
+                    WHERE invoice_id = %s
+                    ORDER BY id ASC
+                    """,
+                    (invoice["id"],),
+                )
+                items = [
+                    InvoiceItem(
+                        description=row["description"],
+                        quantity=float(row["quantity"]),
+                        unit_price_cents=int(row["unit_price"]),
+                    )
+                    for row in cur.fetchall()
+                ]
+                history.append(
+                    InvoiceDraft(
+                        user_id=user_id,
+                        items=items,
+                        client_id=invoice.get("client_id"),
+                        notes=invoice.get("notes") or "",
+                        created_at=invoice.get("created_at") or _utcnow(),
+                    )
+                )
+            return history
+
+    def record_ticket(self, ticket: SupportTicket) -> None:
+        user = self._ensure_user(ticket.user_id)
+        ticket_id = str(uuid4())
+        with self._connect() as conn, conn.cursor() as cur:
+            cur.execute(
+                """
+                INSERT INTO tickets (id, user_id, type, subject)
+                VALUES (%s, %s, %s, %s)
+                """,
+                (ticket_id, user["id"], ticket.kind, ticket.subject),
+            )
+            cur.execute(
+                """
+                INSERT INTO ticket_messages (id, ticket_id, sender, body)
+                VALUES (%s, %s, %s, %s)
+                """,
+                (str(uuid4()), ticket_id, "telegram_user", ticket.body),
+            )
+            conn.commit()
+
+    def invoice_count_this_month(self, user_id: str) -> int:
+        user = self._ensure_user(user_id)
+        with self._connect() as conn, conn.cursor() as cur:
+            cur.execute("SELECT invoice_count_this_month FROM users WHERE id = %s", (user["id"],))
+            row = cur.fetchone()
+            return int(row["invoice_count_this_month"]) if row else 0
+
+    def paid_credits(self, user_id: str) -> int:
+        user = self._ensure_user(user_id)
+        with self._connect() as conn, conn.cursor() as cur:
+            cur.execute("SELECT paid_invoice_credits FROM users WHERE id = %s", (user["id"],))
+            row = cur.fetchone()
+            return int(row["paid_invoice_credits"]) if row else 0
+
+    def consume_paid_credit_if_needed(self, user_id: str, free_limit: int) -> None:
+        user = self._ensure_user(user_id)
+        with self._connect() as conn, conn.cursor() as cur:
+            cur.execute(
+                "SELECT invoice_count_this_month, paid_invoice_credits FROM users WHERE id = %s",
+                (user["id"],),
+            )
+            row = cur.fetchone()
+            if row and int(row["invoice_count_this_month"]) >= free_limit and int(row["paid_invoice_credits"]) > 0:
+                cur.execute(
+                    """
+                    UPDATE users
+                    SET paid_invoice_credits = paid_invoice_credits - 1, updated_at = NOW()
+                    WHERE id = %s
+                    """,
+                    (user["id"],),
+                )
+                conn.commit()
+
+    def reset_monthly_quota(self) -> int:
+        with self._connect() as conn, conn.cursor() as cur:
+            cur.execute(
+                """
+                UPDATE users
+                SET invoice_count_this_month = 0, updated_at = NOW()
+                WHERE invoice_count_this_month <> 0
+                """
+            )
+            updated = cur.rowcount
+            conn.commit()
+            return updated

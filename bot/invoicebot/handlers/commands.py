@@ -9,7 +9,7 @@ from invoicebot.models import SupportTicket
 from invoicebot.services.billing import evaluate_quota
 from invoicebot.services.parser import parse_line_items
 from invoicebot.services.pdf import render_invoice_pdf
-from invoicebot.services.storage import InMemoryRepository
+from invoicebot.services.storage import Repository
 from invoicebot.services.template_catalog import TEMPLATES
 
 
@@ -18,7 +18,7 @@ def _user_key(update: Update) -> str:
     return str(user.id if user else "unknown")
 
 
-def _repo(context: ContextTypes.DEFAULT_TYPE) -> InMemoryRepository:
+def _repo(context: ContextTypes.DEFAULT_TYPE) -> Repository:
     return context.application.bot_data["repo"]
 
 
@@ -53,8 +53,8 @@ async def generate_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         return
 
     decision = evaluate_quota(
-        invoice_count_this_month=repo.invoice_counts[user_id],
-        paid_credits=repo.credits[user_id],
+        invoice_count_this_month=repo.invoice_count_this_month(user_id),
+        paid_credits=repo.paid_credits(user_id),
         free_limit=context.application.bot_data["settings"].free_invoice_limit,
         warning_threshold=context.application.bot_data["settings"].warning_threshold,
     )
