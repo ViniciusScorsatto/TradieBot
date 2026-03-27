@@ -10,3 +10,22 @@ def test_parse_line_items_supports_quantity_syntax() -> None:
     assert items[0].unit_price_cents == 9500
     assert items[1].description == "Materials"
     assert items[1].line_total_cents == 4500
+
+
+def test_parse_line_items_supports_natural_voice_phrasing() -> None:
+    items = parse_line_items("Labor two times at $95 each")
+
+    assert len(items) == 1
+    assert items[0].description == "Labor"
+    assert items[0].quantity == 2
+    assert items[0].unit_price_cents == 9500
+    assert items[0].line_total_cents == 19000
+
+
+def test_parse_line_items_supports_price_without_dollar_symbol() -> None:
+    items = parse_line_items("Materials 45 dollars")
+
+    assert len(items) == 1
+    assert items[0].description == "Materials"
+    assert items[0].quantity == 1
+    assert items[0].unit_price_cents == 4500
