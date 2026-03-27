@@ -1,18 +1,18 @@
 import Stripe from "stripe";
 import { NextRequest, NextResponse } from "next/server";
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY ?? "");
-
 export async function POST(request: NextRequest) {
   const payload = await request.text();
   const signature = request.headers.get("stripe-signature");
   const secret = process.env.STRIPE_WEBHOOK_SECRET;
+  const apiKey = process.env.STRIPE_SECRET_KEY;
 
-  if (!signature || !secret) {
-    return NextResponse.json({ error: "Missing Stripe signature configuration" }, { status: 400 });
+  if (!signature || !secret || !apiKey) {
+    return NextResponse.json({ error: "Missing Stripe configuration" }, { status: 400 });
   }
 
   try {
+    const stripe = new Stripe(apiKey);
     const event = stripe.webhooks.constructEvent(payload, signature, secret);
     switch (event.type) {
       case "checkout.session.completed":
