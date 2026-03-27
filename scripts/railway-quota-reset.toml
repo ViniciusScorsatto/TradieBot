@@ -1,11 +1,12 @@
 [build]
-builder = "RAILPACK"
+builder = "DOCKERFILE"
+dockerfilePath = "scripts/quota-reset.Dockerfile"
 watchPatterns = [
   "/scripts/reset_monthly_quota.py",
-  "/scripts/railway-quota-reset.toml"
+  "/scripts/railway-quota-reset.toml",
+  "/scripts/quota-reset.Dockerfile"
 ]
 
 [deploy]
-startCommand = "python3 scripts/reset_monthly_quota.py"
 restartPolicyType = "NEVER"
 cronSchedule = "5 12 * * *"
