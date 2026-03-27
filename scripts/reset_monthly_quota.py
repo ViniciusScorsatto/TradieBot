@@ -27,8 +27,11 @@ def main() -> None:
         cur.execute(
             """
             UPDATE users
-            SET invoice_count_this_month = 0, updated_at = NOW()
+            SET invoice_count_this_month = 0,
+                voice_transcriptions_this_month = 0,
+                updated_at = NOW()
             WHERE invoice_count_this_month <> 0
+               OR voice_transcriptions_this_month <> 0
             """
         )
         updated = cur.rowcount

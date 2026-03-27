@@ -28,6 +28,8 @@ class Repository(Protocol):
     def record_ticket(self, ticket: SupportTicket) -> None: ...
     def invoice_count_this_month(self, user_id: str) -> int: ...
     def paid_credits(self, user_id: str) -> int: ...
+    def voice_count_this_month(self, user_id: str) -> int: ...
+    def increment_voice_usage(self, user_id: str) -> None: ...
     def consume_paid_credit_if_needed(self, user_id: str, free_limit: int) -> None: ...
 
 
@@ -41,6 +43,7 @@ class InMemoryRepository:
         self.history: DefaultDict[str, list[InvoiceDraft]] = defaultdict(list)
         self.invoice_counts: DefaultDict[str, int] = defaultdict(int)
         self.credits: DefaultDict[str, int] = defaultdict(int)
+        self.voice_counts: DefaultDict[str, int] = defaultdict(int)
         self.tickets: DefaultDict[str, list[SupportTicket]] = defaultdict(list)
 
     def get_or_create_profile(self, user_id: str) -> Profile:
@@ -93,6 +96,12 @@ class InMemoryRepository:
     def paid_credits(self, user_id: str) -> int:
         return self.credits[user_id]
 
+    def voice_count_this_month(self, user_id: str) -> int:
+        return self.voice_counts[user_id]
+
+    def increment_voice_usage(self, user_id: str) -> None:
+        self.voice_counts[user_id] += 1
+
     def consume_paid_credit_if_needed(self, user_id: str, free_limit: int) -> None:
         if self.invoice_counts[user_id] >= free_limit and self.credits[user_id] > 0:
             self.credits[user_id] -= 1
@@ -123,6 +132,7 @@ class PostgresRepository:
               plan_tier TEXT NOT NULL DEFAULT 'FREE',
               stripe_customer_id TEXT UNIQUE,
               invoice_count_this_month INTEGER NOT NULL DEFAULT 0,
+              voice_transcriptions_this_month INTEGER NOT NULL DEFAULT 0,
               paid_invoice_credits INTEGER NOT NULL DEFAULT 0,
               joined_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
               updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
@@ -233,6 +243,7 @@ class PostgresRepository:
         with self._connect() as conn, conn.cursor() as cur:
             for statement in statements:
                 cur.execute(statement)
+            cur.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS voice_transcriptions_this_month INTEGER NOT NULL DEFAULT 0")
             conn.commit()
 
     def _ensure_user(self, user_id: str) -> dict:
@@ -672,6 +683,27 @@ class PostgresRepository:
             row = cur.fetchone()
             return int(row["paid_invoice_credits"]) if row else 0
 
+    def voice_count_this_month(self, user_id: str) -> int:
+        user = self._ensure_user(user_id)
+        with self._connect() as conn, conn.cursor() as cur:
+            cur.execute("SELECT voice_transcriptions_this_month FROM users WHERE id = %s", (user["id"],))
+            row = cur.fetchone()
+            return int(row["voice_transcriptions_this_month"]) if row else 0
+
+    def increment_voice_usage(self, user_id: str) -> None:
+        user = self._ensure_user(user_id)
+        with self._connect() as conn, conn.cursor() as cur:
+            cur.execute(
+                """
+                UPDATE users
+                SET voice_transcriptions_this_month = voice_transcriptions_this_month + 1,
+                    updated_at = NOW()
+                WHERE id = %s
+                """,
+                (user["id"],),
+            )
+            conn.commit()
+
     def consume_paid_credit_if_needed(self, user_id: str, free_limit: int) -> None:
         user = self._ensure_user(user_id)
         with self._connect() as conn, conn.cursor() as cur:
@@ -696,8 +728,10 @@ class PostgresRepository:
             cur.execute(
                 """
                 UPDATE users
-                SET invoice_count_this_month = 0, updated_at = NOW()
-                WHERE invoice_count_this_month <> 0
+                SET invoice_count_this_month = 0,
+                    voice_transcriptions_this_month = 0,
+                    updated_at = NOW()
+                WHERE invoice_count_this_month <> 0 OR voice_transcriptions_this_month <> 0
                 """
             )
             updated = cur.rowcount

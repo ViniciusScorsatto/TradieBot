@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import replace
+from tempfile import NamedTemporaryFile
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import ContextTypes
@@ -11,6 +12,7 @@ from invoicebot.services.parser import parse_line_items
 from invoicebot.services.pdf import render_invoice_pdf
 from invoicebot.services.storage import Repository
 from invoicebot.services.template_catalog import TEMPLATES
+from invoicebot.services.transcription import transcribe_audio_file
 
 
 def _user_key(update: Update) -> str:
@@ -143,8 +145,11 @@ async def support_command(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    if not update.message or not update.message.text:
-        await update.message.reply_text("Text messages are supported in this scaffold. Voice transcription hooks can be added next.")
+    if not update.message:
+        return
+
+    if update.message.voice or update.message.audio:
+        await _handle_voice_message(update, context)
         return
 
     repo = _repo(context)
@@ -222,6 +227,70 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     await update.message.reply_text(
         "Use /invoice to start a draft, /profile to set up your business, or /support if you need help."
     )
+
+
+async def _handle_voice_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    message = update.message
+    if not message:
+        return
+
+    mode = context.user_data.get("mode")
+    if mode != "invoice_items":
+        await message.reply_text("Voice notes are only supported while you are in an active /invoice draft.")
+        return
+
+    voice = message.voice or message.audio
+    if not voice:
+        await message.reply_text("Send a Telegram voice note or audio file during an invoice draft.")
+        return
+
+    settings = context.application.bot_data["settings"]
+    repo = _repo(context)
+    user_id = _user_key(update)
+
+    if not settings.openai_api_key:
+        await message.reply_text("Voice transcription is not enabled right now. Please type the line items instead.")
+        return
+
+    duration = getattr(voice, "duration", None) or 0
+    if duration > settings.voice_note_max_seconds:
+        await message.reply_text(
+            f"Voice notes must be {settings.voice_note_max_seconds} seconds or shorter. Please send a shorter note or type the items."
+        )
+        return
+
+    used = repo.voice_count_this_month(user_id)
+    if used >= settings.free_voice_transcriptions_per_month:
+        await message.reply_text(
+            "You have used your free monthly voice transcription allowance. Please type the line items for now."
+        )
+        return
+
+    telegram_file = await context.bot.get_file(voice.file_id)
+    with NamedTemporaryFile(suffix=".ogg", delete=True) as temp_file:
+        await telegram_file.download_to_drive(custom_path=temp_file.name)
+        try:
+            transcript = await transcribe_audio_file(temp_file.name, settings.openai_api_key)
+        except Exception:
+            await message.reply_text("I couldn't transcribe that voice note. Please try again or type the items manually.")
+            return
+
+    draft = repo.get_draft(user_id) or repo.create_draft(user_id)
+    try:
+        draft.items.extend(parse_line_items(transcript))
+        repo.save_draft(draft)
+        repo.increment_voice_usage(user_id)
+        await message.reply_text(
+            "Voice note transcribed and added.\n\n"
+            f"Transcript:\n{transcript}\n\n"
+            f"You now have {len(draft.items)} item(s) in this draft."
+        )
+    except ValueError:
+        await message.reply_text(
+            "I transcribed the voice note, but couldn't turn it into invoice line items.\n\n"
+            f"Transcript:\n{transcript}\n\n"
+            "Please edit the wording or type the items manually."
+        )
 
 
 async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
