@@ -10,7 +10,9 @@ type AdminUserRow = {
   handle: string;
   plan: string;
   invoiceCount: number;
+  paidInvoiceCredits: number;
   voiceCount: number;
+  paidVoiceCredits: number;
   joinedAt: string;
   templateId: string;
   stripeCustomerId: string | null;
@@ -25,7 +27,9 @@ async function loadUsers(): Promise<AdminUserRow[]> {
         COALESCE(u.telegram_handle, 'No handle') AS handle,
         u.plan_tier AS plan,
         u.invoice_count_this_month AS "invoiceCount",
+        COALESCE(u.paid_invoice_credits, 0) AS "paidInvoiceCredits",
         COALESCE(u.voice_transcriptions_this_month, 0) AS "voiceCount",
+        COALESCE(u.paid_voice_credits, 0) AS "paidVoiceCredits",
         TO_CHAR(u.joined_at, 'YYYY-MM-DD') AS "joinedAt",
         COALESCE(p.default_template_id, 'classic-blue') AS "templateId",
         u.stripe_customer_id AS "stripeCustomerId"
@@ -84,6 +88,10 @@ export default async function UsersPage({
 }) {
   const users = await loadUsers();
   const message = searchParams?.message;
+  const freeInvoiceLimit = Number(process.env.FREE_INVOICE_LIMIT ?? "10");
+  const paidInvoiceBlock = Number(process.env.PAID_INVOICE_BLOCK ?? "20");
+  const freeVoiceLimit = Number(process.env.FREE_VOICE_TRANSCRIPTIONS_PER_MONTH ?? "20");
+  const paidVoiceBlock = Number(process.env.PAID_VOICE_BLOCK ?? "100");
   return (
     <div className="stack">
       <section className="hero-card">
@@ -91,6 +99,10 @@ export default async function UsersPage({
         <p>
           Review usage, template choice, Stripe status, and where manual quota adjustments may
           be needed for claims or support recovery.
+        </p>
+        <p>
+          Current environment: {freeInvoiceLimit} free invoices, +{paidInvoiceBlock} invoices per paid block,
+          {freeVoiceLimit} free voice notes, +{paidVoiceBlock} voice notes per paid block.
         </p>
       </section>
 
@@ -108,8 +120,10 @@ export default async function UsersPage({
               <th>Name</th>
               <th>Handle</th>
               <th>Plan</th>
-              <th>Invoices</th>
-              <th>Voice</th>
+              <th>Invoices Used</th>
+              <th>Invoices Left</th>
+              <th>Voice Used</th>
+              <th>Voice Left</th>
               <th>Template</th>
               <th>Stripe</th>
               <th>Actions</th>
@@ -118,17 +132,21 @@ export default async function UsersPage({
           <tbody>
             {users.length === 0 ? (
               <tr>
-                <td colSpan={8}>No users found yet.</td>
+                <td colSpan={10}>No users found yet.</td>
               </tr>
             ) : users.map((user) => {
               const template = invoiceTemplates.find((item) => item.id === user.templateId);
+              const freeInvoicesLeft = Math.max(freeInvoiceLimit - user.invoiceCount, 0);
+              const freeVoiceLeft = Math.max(freeVoiceLimit - user.voiceCount, 0);
               return (
                 <tr key={user.id}>
                   <td>{user.name}</td>
                   <td>{user.handle}</td>
                   <td>{user.plan}</td>
                   <td>{user.invoiceCount}</td>
+                  <td>{freeInvoicesLeft} free left, {user.paidInvoiceCredits} paid</td>
                   <td>{user.voiceCount}</td>
+                  <td>{freeVoiceLeft} free left, {user.paidVoiceCredits} paid</td>
                   <td>{template?.name ?? user.templateId}</td>
                   <td>{user.stripeCustomerId ?? "Not linked"}</td>
                   <td>
