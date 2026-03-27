@@ -75,6 +75,8 @@ Set these at the project level if multiple services need them:
 - `STRIPE_WEBHOOK_SECRET`
 - `STRIPE_INVOICE_PRICE_ID`
 - `STRIPE_VOICE_PRICE_ID`
+- `MARKETING_SITE_URL`
+- `PAID_VOICE_BLOCK`
 - `ADMIN_EMAIL`
 - `ADMIN_PASSWORD_HASH`
 - `ADMIN_TOTP_SECRET`
@@ -89,6 +91,8 @@ Set these at the project level if multiple services need them:
 - `STRIPE_SECRET_KEY`
 - `STRIPE_INVOICE_PRICE_ID`
 - `STRIPE_VOICE_PRICE_ID`
+- `MARKETING_SITE_URL`
+- `PAID_VOICE_BLOCK`
 - `DATABASE_URL`
 
 ### Dashboard

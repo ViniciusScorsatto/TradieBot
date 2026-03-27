@@ -16,6 +16,7 @@ class Settings:
     warning_threshold: int = 8
     free_invoice_limit: int = 10
     paid_invoice_block: int = 20
+    paid_voice_block: int = 100
     free_voice_transcriptions_per_month: int = 20
     voice_note_max_seconds: int = 60
 
@@ -29,6 +30,7 @@ class Settings:
             stripe_invoice_price_id=os.getenv("STRIPE_INVOICE_PRICE_ID", ""),
             stripe_voice_price_id=os.getenv("STRIPE_VOICE_PRICE_ID", ""),
             marketing_site_url=os.getenv("MARKETING_SITE_URL", ""),
+            paid_voice_block=int(os.getenv("PAID_VOICE_BLOCK", "100")),
             free_voice_transcriptions_per_month=int(os.getenv("FREE_VOICE_TRANSCRIPTIONS_PER_MONTH", "20")),
             voice_note_max_seconds=int(os.getenv("VOICE_NOTE_MAX_SECONDS", "60")),
         )

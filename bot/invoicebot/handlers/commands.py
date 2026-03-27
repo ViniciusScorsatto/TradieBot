@@ -8,6 +8,7 @@ from telegram.ext import ContextTypes
 
 from invoicebot.models import SupportTicket
 from invoicebot.services.billing import evaluate_quota
+from invoicebot.services.checkout import create_checkout_session
 from invoicebot.services.parser import parse_line_items
 from invoicebot.services.pdf import render_invoice_pdf
 from invoicebot.services.storage import Repository
@@ -26,12 +27,80 @@ def _repo(context: ContextTypes.DEFAULT_TYPE) -> Repository:
 
 def _voice_limit_keyboard(settings) -> InlineKeyboardMarkup:
     rows: list[list[InlineKeyboardButton]] = [[InlineKeyboardButton("Keep with text", callback_data="voice_continue_text")]]
-    pricing_url = settings.marketing_site_url.strip().rstrip("/")
-    if pricing_url:
-        rows.append([InlineKeyboardButton("Unlock voice", url=f"{pricing_url}/pricing")])
-    else:
-        rows.append([InlineKeyboardButton("Unlock voice", callback_data="voice_upgrade_info")])
+    rows.append([InlineKeyboardButton("Unlock voice", callback_data="buy_voice_credits")])
     return InlineKeyboardMarkup(rows)
+
+
+def _invoice_limit_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup([[InlineKeyboardButton("Unlock 20 more invoices", callback_data="buy_invoice_credits")]])
+
+
+def _checkout_return_urls(settings, purchase_type: str) -> tuple[str, str]:
+    base_url = settings.marketing_site_url.strip().rstrip("/")
+    if not base_url:
+        raise ValueError("MARKETING_SITE_URL is not configured")
+    return (
+        f"{base_url}/pricing?checkout=success&type={purchase_type}",
+        f"{base_url}/pricing?checkout=cancelled&type={purchase_type}",
+    )
+
+
+async def _send_checkout_prompt(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+    *,
+    purchase_type: str,
+) -> None:
+    repo = _repo(context)
+    settings = context.application.bot_data["settings"]
+    user_id = _user_key(update)
+
+    if not settings.stripe_secret_key:
+        raise ValueError("STRIPE_SECRET_KEY is not configured")
+
+    if purchase_type == "voice":
+        price_id = settings.stripe_voice_price_id
+        credits_purchased = settings.paid_voice_block
+        button_label = f"Pay NZD $5 for {credits_purchased} voice notes"
+        body = (
+            "Unlock more voice transcriptions with a secure Stripe checkout.\n\n"
+            f"This purchase adds {credits_purchased} voice notes to your account."
+        )
+    else:
+        price_id = settings.stripe_invoice_price_id
+        credits_purchased = settings.paid_invoice_block
+        button_label = f"Pay NZD $5 for {credits_purchased} invoices"
+        body = (
+            "Unlock more invoice credits with a secure Stripe checkout.\n\n"
+            f"This purchase adds {credits_purchased} invoices to your account."
+        )
+
+    if not price_id:
+        raise ValueError("Stripe price is not configured")
+
+    success_url, cancel_url = _checkout_return_urls(settings, purchase_type)
+    session = create_checkout_session(
+        api_key=settings.stripe_secret_key,
+        price_id=price_id,
+        success_url=success_url,
+        cancel_url=cancel_url,
+        telegram_user_id=user_id,
+        purchase_type=purchase_type,
+        credits_purchased=credits_purchased,
+        customer_id=repo.stripe_customer_id(user_id),
+    )
+    if isinstance(session.customer, str) and session.customer:
+        repo.save_stripe_customer_id(user_id, session.customer)
+    if not session.url:
+        raise ValueError("Stripe did not return a checkout URL")
+
+    keyboard = InlineKeyboardMarkup([[InlineKeyboardButton(button_label, url=session.url)]])
+    target_message = update.callback_query.message if update.callback_query else update.message
+    if target_message:
+        await target_message.reply_text(
+            f"{body}\n\nAfter payment completes, come back here and continue in Telegram.",
+            reply_markup=keyboard,
+        )
 
 
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -89,7 +158,10 @@ async def generate_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     if decision.warning:
         await update.message.reply_text(decision.warning)
     if not decision.allowed:
-        await update.message.reply_text(decision.message or "Payment required.")
+        await update.message.reply_text(
+            decision.message or "Payment required.",
+            reply_markup=_invoice_limit_keyboard(),
+        )
         return
 
     lines = "\n".join(
@@ -334,7 +406,8 @@ async def _handle_voice_message(update: Update, context: ContextTypes.DEFAULT_TY
         return
 
     used = repo.voice_count_this_month(user_id)
-    if used >= settings.free_voice_transcriptions_per_month:
+    paid_voice_credits = repo.paid_voice_credits(user_id)
+    if used >= settings.free_voice_transcriptions_per_month and paid_voice_credits <= 0:
         await message.reply_text(
             "You’ve used your free monthly voice transcriptions.\n\n"
             "You can keep going by typing the line items, or unlock more voice transcriptions to keep invoicing by voice.",
@@ -356,6 +429,7 @@ async def _handle_voice_message(update: Update, context: ContextTypes.DEFAULT_TY
         draft.items.extend(parse_line_items(transcript))
         repo.save_draft(draft)
         repo.increment_voice_usage(user_id)
+        repo.consume_paid_voice_credit_if_needed(user_id, settings.free_voice_transcriptions_per_month)
         await message.reply_text(
             "Voice note transcribed and added.\n\n"
             f"Transcript:\n{transcript}\n\n"
@@ -393,11 +467,26 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         )
         return
 
-    if query.data == "voice_upgrade_info":
-        await query.edit_message_text(
-            "Voice is a premium add-on.\n\n"
-            "Keep going with text for now, and we’ll wire direct in-bot checkout here next."
-        )
+    if query.data == "buy_voice_credits":
+        try:
+            await _send_checkout_prompt(update, context, purchase_type="voice")
+        except Exception:
+            await query.edit_message_text(
+                "I couldn't create the voice checkout right now. Please try again in a moment or keep going with text."
+            )
+        else:
+            await query.edit_message_text("Secure voice checkout ready below.")
+        return
+
+    if query.data == "buy_invoice_credits":
+        try:
+            await _send_checkout_prompt(update, context, purchase_type="invoice")
+        except Exception:
+            await query.edit_message_text(
+                "I couldn't create the invoice checkout right now. Please try again in a moment."
+            )
+        else:
+            await query.edit_message_text("Secure invoice checkout ready below.")
         return
 
     if query.data == "confirm_generate":
