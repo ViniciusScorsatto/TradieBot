@@ -9,7 +9,7 @@ const links = [
   { href: "/billing", label: "Billing" },
   { href: "/tickets", label: "Tickets" },
   { href: "/login", label: "Admin Login" }
-];
+] as const;
 
 export function Sidebar() {
   const pathname = usePathname();
