@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import replace
 from tempfile import NamedTemporaryFile
+import traceback
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import ContextTypes
@@ -470,7 +471,14 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     if query.data == "buy_voice_credits":
         try:
             await _send_checkout_prompt(update, context, purchase_type="voice")
+        except ValueError as exc:
+            print(f"Voice checkout configuration error: {exc}")
+            await query.edit_message_text(
+                f"Voice checkout is not fully configured yet: {exc}"
+            )
         except Exception:
+            print("Voice checkout failed:")
+            print(traceback.format_exc())
             await query.edit_message_text(
                 "I couldn't create the voice checkout right now. Please try again in a moment or keep going with text."
             )
@@ -481,7 +489,14 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     if query.data == "buy_invoice_credits":
         try:
             await _send_checkout_prompt(update, context, purchase_type="invoice")
+        except ValueError as exc:
+            print(f"Invoice checkout configuration error: {exc}")
+            await query.edit_message_text(
+                f"Invoice checkout is not fully configured yet: {exc}"
+            )
         except Exception:
+            print("Invoice checkout failed:")
+            print(traceback.format_exc())
             await query.edit_message_text(
                 "I couldn't create the invoice checkout right now. Please try again in a moment."
             )
