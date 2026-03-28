@@ -51,6 +51,59 @@ def _item_line(item, index: int) -> str:
     return f"{index + 1}. {item.description}: {item.quantity:g} x ${item.unit_price_cents / 100:.2f}"
 
 
+def _client_summary(client) -> str:
+    extras = []
+    if client.company:
+        extras.append(client.company)
+    if client.email:
+        extras.append(client.email)
+    if client.phone:
+        extras.append(client.phone)
+    return f"{client.name}" + (f" ({' • '.join(extras)})" if extras else "")
+
+
+def _clients_keyboard(clients) -> InlineKeyboardMarkup:
+    rows: list[list[InlineKeyboardButton]] = []
+    for client in clients:
+        rows.append(
+            [
+                InlineKeyboardButton(f"Edit {client.name}", callback_data=f"client_edit:{client.id}"),
+                InlineKeyboardButton(f"Delete {client.name}", callback_data=f"client_delete:{client.id}"),
+            ]
+        )
+    return InlineKeyboardMarkup(rows)
+
+
+def _client_edit_keyboard(client_id: str) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        [
+            [
+                InlineKeyboardButton("Name", callback_data=f"client_field:{client_id}:name"),
+                InlineKeyboardButton("Company", callback_data=f"client_field:{client_id}:company"),
+            ],
+            [
+                InlineKeyboardButton("Email", callback_data=f"client_field:{client_id}:email"),
+                InlineKeyboardButton("Phone", callback_data=f"client_field:{client_id}:phone"),
+            ],
+            [InlineKeyboardButton("Address", callback_data=f"client_field:{client_id}:address")],
+            [InlineKeyboardButton("Done", callback_data="client_edit_done")],
+        ]
+    )
+
+
+async def _send_clients_list(message: Message | None, clients) -> None:
+    if not message:
+        return
+    if not clients:
+        await message.reply_text("No saved clients yet. Use /newclient to add one.")
+        return
+    lines = "\n".join(f"{index + 1}. {_client_summary(client)}" for index, client in enumerate(clients))
+    await message.reply_text(
+        "Saved clients:\n\n" + lines,
+        reply_markup=_clients_keyboard(clients),
+    )
+
+
 def _draft_editor_keyboard(draft) -> InlineKeyboardMarkup:
     rows: list[list[InlineKeyboardButton]] = []
     for index, item in enumerate(draft.items):
@@ -258,10 +311,7 @@ async def new_client_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
 async def clients_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     repo = _repo(context)
     clients = repo.list_clients(_user_key(update))
-    if not clients:
-        await update.message.reply_text("No saved clients yet. Use /newclient to add one.")
-        return
-    await update.message.reply_text("\n".join(f"- {client.name} ({client.company or 'no company'})" for client in clients))
+    await _send_clients_list(update.message, clients)
 
 
 async def history_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -433,6 +483,28 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         await update.message.reply_text(f"Saved client {client.name}.")
         return
 
+    if mode == "edit_client_field":
+        client_id = context.user_data.get("edit_client_id")
+        field = context.user_data.get("edit_client_field")
+        client = repo.get_client(user_id, client_id) if client_id else None
+        if not client or field not in {"name", "company", "email", "phone", "address"}:
+            context.user_data["mode"] = None
+            context.user_data.pop("edit_client_id", None)
+            context.user_data.pop("edit_client_field", None)
+            await update.message.reply_text("That client is no longer available. Use /clients to refresh the list.")
+            return
+        value = "" if text.lower() == "remove" else text
+        setattr(client, field, value)
+        repo.update_client(user_id, client)
+        context.user_data["mode"] = None
+        context.user_data.pop("edit_client_id", None)
+        context.user_data.pop("edit_client_field", None)
+        await update.message.reply_text(
+            f"Updated {field} for {client.name}.",
+            reply_markup=_client_edit_keyboard(client.id),
+        )
+        return
+
     if mode == "support_type":
         normalized = text.upper()
         if normalized not in {"BUG", "CLAIM", "IMPROVEMENT", "IDEA"}:
@@ -553,6 +625,51 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         draft = repo.get_draft(user_id)
         await query.edit_message_text("Draft still open. Use the controls below or send more line items.")
         await _send_draft_editor(query.message, draft)
+        return
+
+    if query.data == "client_edit_done":
+        clients = repo.list_clients(user_id)
+        await query.edit_message_text("Client edit finished.")
+        await _send_clients_list(query.message, clients)
+        return
+
+    if query.data.startswith("client_edit:"):
+        client_id = query.data.split(":", 1)[1]
+        client = repo.get_client(user_id, client_id)
+        if not client:
+            await query.edit_message_text("That client is no longer available. Use /clients to refresh the list.")
+            return
+        await query.edit_message_text(
+            f"Editing client: {_client_summary(client)}\n\nChoose a field to update.",
+            reply_markup=_client_edit_keyboard(client.id),
+        )
+        return
+
+    if query.data.startswith("client_field:"):
+        _, client_id, field = query.data.split(":", 2)
+        client = repo.get_client(user_id, client_id)
+        if not client or field not in {"name", "company", "email", "phone", "address"}:
+            await query.edit_message_text("That client is no longer available. Use /clients to refresh the list.")
+            return
+        context.user_data["mode"] = "edit_client_field"
+        context.user_data["edit_client_id"] = client_id
+        context.user_data["edit_client_field"] = field
+        current_value = getattr(client, field)
+        await query.edit_message_text(
+            f"Current {field}: {current_value or 'not set'}\n\nSend the new {field}, or type `remove` to clear it.",
+            parse_mode="Markdown",
+        )
+        return
+
+    if query.data.startswith("client_delete:"):
+        client_id = query.data.split(":", 1)[1]
+        client = repo.get_client(user_id, client_id)
+        if not client:
+            await query.edit_message_text("That client is no longer available. Use /clients to refresh the list.")
+            return
+        repo.delete_client(user_id, client_id)
+        await query.edit_message_text(f"Deleted client {client.name}.")
+        await _send_clients_list(query.message, repo.list_clients(user_id))
         return
 
     if query.data.startswith("edit_item:"):

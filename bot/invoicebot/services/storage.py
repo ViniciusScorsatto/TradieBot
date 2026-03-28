@@ -25,6 +25,8 @@ class Repository(Protocol):
     def add_client(self, user_id: str, name: str, company: str = "", email: str = "", phone: str = "", address: str = "") -> Client: ...
     def list_clients(self, user_id: str) -> list[Client]: ...
     def get_client(self, user_id: str, client_id: str) -> Client | None: ...
+    def update_client(self, user_id: str, client: Client) -> Client | None: ...
+    def delete_client(self, user_id: str, client_id: str) -> bool: ...
     def list_history(self, user_id: str) -> list[InvoiceDraft]: ...
     def record_ticket(self, ticket: SupportTicket) -> None: ...
     def invoice_count_this_month(self, user_id: str) -> int: ...
@@ -96,6 +98,18 @@ class InMemoryRepository:
             if client.id == client_id:
                 return client
         return None
+
+    def update_client(self, user_id: str, client: Client) -> Client | None:
+        for index, existing in enumerate(self.clients[user_id]):
+            if existing.id == client.id:
+                self.clients[user_id][index] = client
+                return client
+        return None
+
+    def delete_client(self, user_id: str, client_id: str) -> bool:
+        before = len(self.clients[user_id])
+        self.clients[user_id] = [client for client in self.clients[user_id] if client.id != client_id]
+        return len(self.clients[user_id]) != before
 
     def list_history(self, user_id: str) -> list[InvoiceDraft]:
         return self.history[user_id]
@@ -661,6 +675,41 @@ class PostgresRepository:
             )
             row = cur.fetchone()
             return self._row_to_client(row) if row else None
+
+    def update_client(self, user_id: str, client: Client) -> Client | None:
+        user = self._ensure_user(user_id)
+        with self._connect() as conn, conn.cursor() as cur:
+            cur.execute(
+                """
+                UPDATE clients
+                SET name = %s,
+                    company = %s,
+                    email = %s,
+                    phone = %s,
+                    address = %s,
+                    updated_at = NOW()
+                WHERE user_id = %s AND id = %s
+                RETURNING id, name, company, email, phone, address
+                """,
+                (client.name, client.company, client.email, client.phone, client.address, user["id"], client.id),
+            )
+            row = cur.fetchone()
+            conn.commit()
+            return self._row_to_client(row) if row else None
+
+    def delete_client(self, user_id: str, client_id: str) -> bool:
+        user = self._ensure_user(user_id)
+        with self._connect() as conn, conn.cursor() as cur:
+            cur.execute(
+                """
+                DELETE FROM clients
+                WHERE user_id = %s AND id = %s
+                """,
+                (user["id"], client_id),
+            )
+            deleted = cur.rowcount > 0
+            conn.commit()
+            return deleted
 
     def list_history(self, user_id: str) -> list[InvoiceDraft]:
         user = self._ensure_user(user_id)
