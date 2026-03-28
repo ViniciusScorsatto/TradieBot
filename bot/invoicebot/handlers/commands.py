@@ -46,6 +46,7 @@ LOGO_MAX_WIDTH = 5000
 LOGO_MAX_HEIGHT = 5000
 ALLOWED_LOGO_MIME_TYPES = {"image/png", "image/jpeg"}
 CLIENTS_PAGE_SIZE = 6
+MAX_INVOICE_ITEMS = 14
 
 
 def _user_key(update: Update) -> str:
@@ -173,6 +174,17 @@ async def _send_temporary_status(message: Message | None, text: str) -> Message 
     if not message:
         return None
     return await message.reply_text(text)
+
+
+async def _validate_invoice_item_limit(message: Message | None, current_count: int, incoming_count: int) -> bool:
+    if current_count + incoming_count <= MAX_INVOICE_ITEMS:
+        return True
+    if message:
+        await message.reply_text(
+            f"Invoices can have up to {MAX_INVOICE_ITEMS} items so the PDF stays within 2 clean pages. "
+            f"You currently have {current_count} item(s)."
+        )
+    return False
 
 
 async def _clear_temporary_status(message: Message | None) -> None:
@@ -646,6 +658,8 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         draft = repo.get_draft(user_id) or repo.create_draft(user_id)
         try:
             new_items = parse_line_items(text)
+            if not await _validate_invoice_item_limit(update.message, len(draft.items), len(new_items)):
+                return
             start_index = len(draft.items)
             draft.items.extend(new_items)
             repo.save_draft(draft)
@@ -986,6 +1000,8 @@ async def _handle_voice_message(update: Update, context: ContextTypes.DEFAULT_TY
     draft = repo.get_draft(user_id) or repo.create_draft(user_id)
     try:
         new_items = parse_line_items(transcript)
+        if not await _validate_invoice_item_limit(message, len(draft.items), len(new_items)):
+            return
         start_index = len(draft.items)
         draft.items.extend(new_items)
         repo.save_draft(draft)

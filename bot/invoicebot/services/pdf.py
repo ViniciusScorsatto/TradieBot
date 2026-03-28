@@ -12,6 +12,9 @@ from reportlab.pdfgen import canvas
 from invoicebot.models import Client, InvoiceDraft, Profile
 from invoicebot.services.template_catalog import get_template
 
+ROWS_PER_PAGE = 7
+MAX_ITEMS_PER_INVOICE = ROWS_PER_PAGE * 2
+
 
 def _draw_wrapped_lines(pdf: canvas.Canvas, x: float, y: float, lines: list[str], *, width: float, step: float = 14) -> float:
     current_y = y
@@ -107,17 +110,72 @@ def _draw_label_value_block(
     _draw_wrapped_lines(pdf, x + 12, top_y - 74, lines, width=width - 24)
 
 
-def render_invoice_pdf(profile: Profile, draft: InvoiceDraft, client: Client | None) -> bytes:
-    template = get_template(profile.default_template_id)
-    buffer = BytesIO()
-    pdf = canvas.Canvas(buffer, pagesize=A4)
-    width, height = A4
+def _draw_table_header(pdf: canvas.Canvas, *, page_left: float, page_right: float, content_width: float, table_top: float) -> None:
+    pdf.setFillColor(colors.HexColor("#f1f3f6"))
+    pdf.rect(page_left, table_top - 18, content_width, 18, fill=1, stroke=0)
+    pdf.setFillColor(colors.HexColor("#535862"))
+    pdf.setFont("Helvetica-Bold", 9)
+    pdf.drawString(page_left + 8, table_top - 12, "Item")
+    pdf.drawString(page_left + 246, table_top - 12, "HRS/QTY")
+    pdf.drawString(page_left + 324, table_top - 12, "Rate")
+    pdf.drawString(page_left + 400, table_top - 12, "Tax")
+    pdf.drawRightString(page_right - 8, table_top - 12, "Subtotal")
 
-    accent = colors.HexColor(template.accent)
-    page_left = 35
-    page_right = width - 40
-    content_width = page_right - page_left
 
+def _draw_items_table(pdf: canvas.Canvas, items: list, *, page_left: float, page_right: float, table_top: float) -> float:
+    y = table_top - 34
+    row_height = 42
+    for item in items:
+        pdf.setStrokeColor(colors.HexColor("#e5e7eb"))
+        pdf.line(page_left, y - 18, page_right, y - 18)
+        pdf.setFillColor(colors.black)
+        pdf.setFont("Helvetica", 10)
+        _draw_wrapped_lines(pdf, page_left + 8, y, [item.description], width=225, step=11)
+        pdf.drawString(page_left + 260, y, f"{item.quantity:g}")
+        pdf.drawString(page_left + 334, y, _money_unit(item.unit_price_cents))
+        pdf.drawString(page_left + 404, y, "GST(15%)")
+        pdf.drawRightString(page_right - 8, y, _money(item.line_total_cents))
+        y -= row_height
+    return y
+
+
+def _draw_summary(pdf: canvas.Canvas, draft: InvoiceDraft, *, page_left: float, page_right: float, content_width: float, summary_title_y: float) -> None:
+    summary_x = page_left + 275
+    summary_width = content_width - 275
+    pdf.setFillColor(colors.HexColor("#f1f3f6"))
+    pdf.rect(summary_x, summary_title_y - 20, summary_width, 24, fill=1, stroke=0)
+    pdf.setFillColor(colors.HexColor("#535862"))
+    pdf.setFont("Helvetica-Bold", 11)
+    pdf.drawCentredString(summary_x + (summary_width / 2), summary_title_y - 12, "Invoice Summary")
+
+    line_y = summary_title_y - 44
+    summary_rows = [
+        ("Subtotal", draft.subtotal_cents),
+        ("GST(15%)", draft.gst_cents),
+        ("Total", draft.total_cents),
+    ]
+    for label, amount in summary_rows:
+        pdf.setStrokeColor(colors.HexColor("#e5e7eb"))
+        pdf.line(summary_x, line_y - 8, page_right, line_y - 8)
+        pdf.setFillColor(colors.HexColor("#535862"))
+        pdf.setFont("Helvetica", 10)
+        pdf.drawString(summary_x + 10, line_y, label)
+        pdf.drawRightString(page_right - 8, line_y, _money(amount))
+        line_y -= 28
+
+
+def _draw_first_page_header(
+    pdf: canvas.Canvas,
+    *,
+    profile: Profile,
+    client: Client | None,
+    accent,
+    template_name: str,
+    width: float,
+    height: float,
+    page_left: float,
+    page_right: float,
+) -> float:
     pdf.setFillColor(accent)
     pdf.rect(0, height - 26, width, 26, fill=1, stroke=0)
     _draw_logo(pdf, profile, x=page_left, y=height - 82, width=110, height=34, accent=accent)
@@ -126,7 +184,7 @@ def render_invoice_pdf(profile: Profile, draft: InvoiceDraft, client: Client | N
     pdf.setFont("Helvetica-Bold", 10)
     pdf.drawRightString(page_right, height - 58, "INVOICE")
     pdf.setFont("Helvetica", 10)
-    pdf.drawRightString(page_right, height - 74, template.name)
+    pdf.drawRightString(page_right, height - 74, template_name)
 
     left_box_x = page_left
     top_box_y = height - 108
@@ -168,6 +226,33 @@ def render_invoice_pdf(profile: Profile, draft: InvoiceDraft, client: Client | N
         headline=client.name if client else "Client to be selected",
         lines=client_lines,
     )
+    return top_box_y
+
+
+def render_invoice_pdf(profile: Profile, draft: InvoiceDraft, client: Client | None) -> bytes:
+    template = get_template(profile.default_template_id)
+    buffer = BytesIO()
+    pdf = canvas.Canvas(buffer, pagesize=A4)
+    width, height = A4
+
+    if len(draft.items) > MAX_ITEMS_PER_INVOICE:
+        raise ValueError(f"Invoices are limited to {MAX_ITEMS_PER_INVOICE} items.")
+
+    accent = colors.HexColor(template.accent)
+    page_left = 35
+    page_right = width - 40
+    content_width = page_right - page_left
+    top_box_y = _draw_first_page_header(
+        pdf,
+        profile=profile,
+        client=client,
+        accent=accent,
+        template_name=template.name,
+        width=width,
+        height=height,
+        page_left=page_left,
+        page_right=page_right,
+    )
 
     invoice_number = f"{profile.invoice_prefix}-{profile.next_invoice_number:04d}"
     invoice_date = draft.created_at.strftime("%b %d, %Y")
@@ -181,53 +266,30 @@ def render_invoice_pdf(profile: Profile, draft: InvoiceDraft, client: Client | N
     pdf.drawString(page_left, meta_y - 20, f"Invoice Date : {invoice_date}")
 
     table_top = meta_y - 52
-    pdf.setFillColor(colors.HexColor("#f1f3f6"))
-    pdf.rect(page_left, table_top - 18, content_width, 18, fill=1, stroke=0)
-    pdf.setFillColor(colors.HexColor("#535862"))
-    pdf.setFont("Helvetica-Bold", 9)
-    pdf.drawString(page_left + 8, table_top - 12, "Item")
-    pdf.drawString(page_left + 246, table_top - 12, "HRS/QTY")
-    pdf.drawString(page_left + 324, table_top - 12, "Rate")
-    pdf.drawString(page_left + 400, table_top - 12, "Tax")
-    pdf.drawRightString(page_right - 8, table_top - 12, "Subtotal")
+    item_pages = [draft.items[index:index + ROWS_PER_PAGE] for index in range(0, len(draft.items), ROWS_PER_PAGE)]
+    _draw_table_header(pdf, page_left=page_left, page_right=page_right, content_width=content_width, table_top=table_top)
+    y = _draw_items_table(pdf, item_pages[0], page_left=page_left, page_right=page_right, table_top=table_top)
 
-    y = table_top - 34
-    row_height = 42
-    for item in draft.items:
-        pdf.setStrokeColor(colors.HexColor("#e5e7eb"))
-        pdf.line(page_left, y - 18, page_right, y - 18)
-        pdf.setFillColor(colors.black)
+    if len(item_pages) == 2:
+        pdf.setFillColor(colors.HexColor("#636a73"))
+        pdf.setFont("Helvetica", 9)
+        pdf.drawRightString(page_right - 8, 28, "Page 1 of 2")
+        pdf.showPage()
+
+        pdf.setFillColor(accent)
+        pdf.rect(0, height - 26, width, 26, fill=1, stroke=0)
+        pdf.setFillColor(colors.HexColor("#636a73"))
+        pdf.setFont("Helvetica-Bold", 10)
+        pdf.drawString(page_left, height - 58, f"Invoice No : {invoice_number}")
+        pdf.drawRightString(page_right, height - 58, f"Page 2 of 2")
         pdf.setFont("Helvetica", 10)
-        _draw_wrapped_lines(pdf, page_left + 8, y, [item.description], width=225, step=11)
-        pdf.drawString(page_left + 260, y, f"{item.quantity:g}")
-        pdf.drawString(page_left + 334, y, _money_unit(item.unit_price_cents))
-        pdf.drawString(page_left + 404, y, "GST(15%)")
-        pdf.drawRightString(page_right - 8, y, _money(item.line_total_cents))
-        y -= row_height
+        pdf.drawString(page_left, height - 74, f"Client: {client.name if client else 'No client selected'}")
 
-    summary_title_y = y - 4
-    summary_x = page_left + 275
-    summary_width = content_width - 275
-    pdf.setFillColor(colors.HexColor("#f1f3f6"))
-    pdf.rect(summary_x, summary_title_y - 20, summary_width, 24, fill=1, stroke=0)
-    pdf.setFillColor(colors.HexColor("#535862"))
-    pdf.setFont("Helvetica-Bold", 11)
-    pdf.drawCentredString(summary_x + (summary_width / 2), summary_title_y - 12, "Invoice Summary")
+        table_top = height - 108
+        _draw_table_header(pdf, page_left=page_left, page_right=page_right, content_width=content_width, table_top=table_top)
+        y = _draw_items_table(pdf, item_pages[1], page_left=page_left, page_right=page_right, table_top=table_top)
 
-    line_y = summary_title_y - 44
-    summary_rows = [
-        ("Subtotal", draft.subtotal_cents),
-        ("GST(15%)", draft.gst_cents),
-        ("Total", draft.total_cents),
-    ]
-    for label, amount in summary_rows:
-        pdf.setStrokeColor(colors.HexColor("#e5e7eb"))
-        pdf.line(summary_x, line_y - 8, page_right, line_y - 8)
-        pdf.setFillColor(colors.HexColor("#535862"))
-        pdf.setFont("Helvetica", 10)
-        pdf.drawString(summary_x + 10, line_y, label)
-        pdf.drawRightString(page_right - 8, line_y, _money(amount))
-        line_y -= 28
+    _draw_summary(pdf, draft, page_left=page_left, page_right=page_right, content_width=content_width, summary_title_y=y - 4)
 
     pdf.showPage()
     pdf.save()
