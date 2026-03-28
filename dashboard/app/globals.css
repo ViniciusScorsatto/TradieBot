@@ -565,6 +565,61 @@ a {
   border-top: 1px solid var(--line);
 }
 
+.ticket-link-button {
+  white-space: nowrap;
+}
+
+.ticket-overview-list {
+  display: grid;
+  gap: 12px;
+  margin-top: 18px;
+}
+
+.ticket-overview-item {
+  display: grid;
+  gap: 10px;
+  padding: 16px 18px;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: linear-gradient(180deg, #ffffff 0%, #fbfcfe 100%);
+  transition: border-color 0.18s ease, transform 0.18s ease, box-shadow 0.18s ease;
+}
+
+.ticket-overview-item:hover {
+  border-color: rgba(255, 106, 61, 0.28);
+  transform: translateY(-1px);
+  box-shadow: var(--shadow);
+}
+
+.ticket-overview-item strong,
+.ticket-overview-item p {
+  margin: 0;
+}
+
+.ticket-overview-item p {
+  color: var(--muted);
+}
+
+.ticket-overview-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.ticket-overview-empty {
+  display: grid;
+  place-items: center;
+  min-height: 280px;
+  padding: 20px;
+  border: 1px dashed var(--line);
+  border-radius: 18px;
+  margin-top: 18px;
+  background: rgba(255, 255, 255, 0.55);
+  text-align: center;
+}
+
 .textarea {
   min-height: 140px;
   resize: vertical;

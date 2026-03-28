@@ -1,6 +1,75 @@
-import { dashboardCopy, overviewStats, payments, tickets, users } from "../lib/data";
+import Link from "next/link";
+import { dashboardCopy, overviewStats, payments, users } from "../lib/data";
+import { prisma } from "../lib/prisma";
 
-export default function DashboardHome() {
+type OverviewTicketRow = {
+  id: string;
+  type: "BUG" | "CLAIM" | "IMPROVEMENT" | "IDEA";
+  status: "OPEN" | "IN_PROGRESS" | "CLOSED";
+  userName: string;
+  subject: string;
+  updatedAt: string;
+};
+
+async function loadRecentTickets(): Promise<OverviewTicketRow[]> {
+  try {
+    return await prisma.$queryRaw<OverviewTicketRow[]>`
+      SELECT
+        t.id,
+        t.type,
+        t.status,
+        COALESCE(NULLIF(TRIM(CONCAT(COALESCE(u.first_name, ''), ' ', COALESCE(u.last_name, ''))), ''), COALESCE(p.company_name, 'Unknown business')) AS "userName",
+        t.subject,
+        TO_CHAR(t.updated_at AT TIME ZONE 'Pacific/Auckland', 'YYYY-MM-DD HH24:MI') AS "updatedAt"
+      FROM tickets t
+      JOIN users u ON u.id = t.user_id
+      LEFT JOIN profiles p ON p.user_id = u.id
+      ORDER BY
+        CASE t.status
+          WHEN 'OPEN' THEN 0
+          WHEN 'IN_PROGRESS' THEN 1
+          ELSE 2
+        END,
+        CASE t.type
+          WHEN 'BUG' THEN 0
+          WHEN 'CLAIM' THEN 1
+          WHEN 'IMPROVEMENT' THEN 2
+          ELSE 3
+        END,
+        t.updated_at DESC
+      LIMIT 4
+    `;
+  } catch {
+    return [];
+  }
+}
+
+function statusTone(status: OverviewTicketRow["status"]) {
+  if (status === "OPEN") {
+    return "badge status-open";
+  }
+  if (status === "IN_PROGRESS") {
+    return "badge status-progress";
+  }
+  return "badge status-closed";
+}
+
+function typeTone(type: OverviewTicketRow["type"]) {
+  if (type === "BUG") {
+    return "badge ticket-bug";
+  }
+  if (type === "CLAIM") {
+    return "badge ticket-claim";
+  }
+  if (type === "IMPROVEMENT") {
+    return "badge ticket-improvement";
+  }
+  return "badge ticket-idea";
+}
+
+export default async function DashboardHome() {
+  const recentTickets = await loadRecentTickets();
+
   return (
     <div className="stack">
       <section className="hero-card">
@@ -52,27 +121,45 @@ export default function DashboardHome() {
             </tbody>
           </table>
         </article>
+
         <article className="panel">
-          <h3>Recent ticket pressure</h3>
-          <p>Bug and claim tickets should bubble to the top so no business gets stuck waiting.</p>
-          <table className="table">
-            <thead>
-              <tr>
-                <th>Type</th>
-                <th>Status</th>
-                <th>User</th>
-              </tr>
-            </thead>
-            <tbody>
-              {tickets.map((ticket, index) => (
-                <tr key={`${ticket.user}-${index}`}>
-                  <td><span className="badge">{ticket.type}</span></td>
-                  <td>{ticket.status}</td>
-                  <td>{ticket.user}</td>
-                </tr>
+          <div className="ticket-panel-head">
+            <div>
+              <h3>Recent ticket pressure</h3>
+              <p>Bug and claim tickets should bubble to the top so no business gets stuck waiting.</p>
+            </div>
+            <Link href="/tickets" className="button small-button ticket-link-button">
+              Open ticket desk
+            </Link>
+          </div>
+
+          {recentTickets.length === 0 ? (
+            <div className="ticket-overview-empty">
+              <p className="muted">No support tickets yet. Once customers use `/support`, the live queue will show up here.</p>
+            </div>
+          ) : (
+            <div className="ticket-overview-list">
+              {recentTickets.map((ticket) => (
+                <Link
+                  key={ticket.id}
+                  href={`/tickets?ticket=${ticket.id}`}
+                  className="ticket-overview-item"
+                >
+                  <div className="ticket-overview-top">
+                    <div className="row-actions">
+                      <span className={typeTone(ticket.type)}>{ticket.type.toLowerCase()}</span>
+                      <span className={statusTone(ticket.status)}>
+                        {ticket.status.replace("_", " ").toLowerCase()}
+                      </span>
+                    </div>
+                    <span className="muted">{ticket.updatedAt}</span>
+                  </div>
+                  <strong>{ticket.subject}</strong>
+                  <p>{ticket.userName}</p>
+                </Link>
               ))}
-            </tbody>
-          </table>
+            </div>
+          )}
         </article>
       </section>
 
