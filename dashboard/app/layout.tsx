@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
-import { Sidebar } from "../components/sidebar";
-import { Topbar } from "../components/topbar";
+import { ShellFrame } from "../components/shell-frame";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -12,13 +11,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en">
       <body>
-        <div className="shell">
-          <Sidebar />
-          <div className="workspace">
-            <Topbar />
-            <main className="main">{children}</main>
-          </div>
-        </div>
+        <ShellFrame>{children}</ShellFrame>
       </body>
     </html>
   );

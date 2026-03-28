@@ -3,6 +3,7 @@ import NextAuth from "next-auth";
 import bcrypt from "bcryptjs";
 import { authenticator } from "otplib";
 import { z } from "zod";
+import type { NextAuthConfig } from "next-auth";
 
 const credentialsSchema = z.object({
   email: z.string().email(),
@@ -10,10 +11,11 @@ const credentialsSchema = z.object({
   totpCode: z.string().length(6).optional()
 });
 
-export const { handlers, auth, signIn, signOut } = NextAuth({
+export const authConfig: NextAuthConfig = {
   session: {
     strategy: "jwt"
   },
+  trustHost: true,
   providers: [
     Credentials({
       credentials: {
@@ -55,7 +57,26 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       }
     })
   ],
+  callbacks: {
+    authorized({ auth, request }) {
+      const isLoggedIn = !!auth?.user;
+      const pathname = request.nextUrl.pathname;
+      const isAuthRoute =
+        pathname === "/login" ||
+        pathname.startsWith("/api/auth") ||
+        pathname.startsWith("/api/webhooks/stripe") ||
+        pathname.startsWith("/api/health");
+
+      if (isAuthRoute) {
+        return true;
+      }
+
+      return isLoggedIn;
+    }
+  },
   pages: {
     signIn: "/login"
   }
-});
+};
+
+export const { handlers, auth, signIn, signOut } = NextAuth(authConfig);
