@@ -199,7 +199,9 @@ def _item_line(item, index: int) -> str:
 
 
 def _client_summary(client) -> str:
-    return f"{client.name}" + (f" ({client.company})" if client.company else "")
+    if client.company:
+        return f"{client.company} - {client.name}"
+    return client.name
 
 
 def _client_matches_query(client, query: str) -> bool:

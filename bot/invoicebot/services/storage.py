@@ -91,7 +91,13 @@ class InMemoryRepository:
         return client
 
     def list_clients(self, user_id: str) -> list[Client]:
-        return self.clients[user_id]
+        return sorted(
+            self.clients[user_id],
+            key=lambda client: (
+                (client.company or "").strip().lower(),
+                client.name.strip().lower(),
+            ),
+        )
 
     def get_client(self, user_id: str, client_id: str) -> Client | None:
         for client in self.clients[user_id]:
@@ -662,7 +668,7 @@ class PostgresRepository:
                 SELECT id, name, company, email, phone, address
                 FROM clients
                 WHERE user_id = %s
-                ORDER BY created_at DESC
+                ORDER BY LOWER(COALESCE(company, '')), LOWER(name), created_at DESC
                 """,
                 (user["id"],),
             )
