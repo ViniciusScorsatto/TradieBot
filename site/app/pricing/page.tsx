@@ -41,7 +41,7 @@ export default function PricingPage({
           <h3>Free every month</h3>
           <div className="priceValue">{pricing.freeInvoicesPerMonth}</div>
           <p>
-            Every tradie gets {pricing.freeInvoicesPerMonth} invoices per month plus{" "}
+            Every business gets {pricing.freeInvoicesPerMonth} invoices per month plus{" "}
             {pricing.freeVoiceTranscriptionsPerMonth} free voice transcriptions up to {pricing.voiceNoteMaxSeconds} seconds each
             before any payment is required.
           </p>

@@ -43,11 +43,11 @@ export default function HomePage() {
     <main className="container">
       <section className="hero">
         <div>
-          <span className="eyebrow">Built for tradies who invoice on the go</span>
-          <h1>Turn job notes into polished invoices straight from Telegram.</h1>
+          <span className="eyebrow">Built for New Zealand small businesses and independent operators</span>
+          <h1>Turn work notes into polished invoices straight from Telegram.</h1>
           <p>
             InvoiceBot helps you speak or type what got done, review the totals, and send
-            a branded invoice PDF without waiting to get back to the laptop.
+            a branded invoice PDF without waiting to get back to the office.
           </p>
           <div className="heroActions">
             <a
@@ -65,7 +65,7 @@ export default function HomePage() {
           <div className="heroFlow">
             <div className="flowStep">
               <strong>1. Send job details</strong>
-              <p>“Labour x 2 at $95, cable tray $48, callout $120.”</p>
+              <p>“Garden tidy x 2 at $95, green waste removal $48, callout $120.”</p>
             </div>
             <div className="flowStep">
               <strong>2. Review and confirm</strong>
@@ -82,7 +82,7 @@ export default function HomePage() {
       <section className="section">
         <div className="sectionHead">
           <div>
-            <h2>Why tradies buy it</h2>
+            <h2>Why small businesses buy it</h2>
             <p>
               The pitch is simple: less admin drag, faster payment, and invoices that still look like they came from a proper system.
             </p>
@@ -156,7 +156,7 @@ export default function HomePage() {
       <section className="section">
         <div className="sectionHead">
           <div>
-            <h2>Questions tradies ask before they try it</h2>
+            <h2>Questions businesses ask before they try it</h2>
           </div>
         </div>
         <div className="faqGrid">

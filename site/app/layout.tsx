@@ -5,7 +5,7 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: "InvoiceBot",
-  description: "Voice-to-invoice in Telegram for tradies"
+  description: "Voice-to-invoice in Telegram for New Zealand small businesses and independent operators"
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

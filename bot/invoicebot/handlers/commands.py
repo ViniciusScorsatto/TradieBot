@@ -456,7 +456,7 @@ async def _send_invoice_items_prompt(message: Message | None, prefix: str | None
     await message.reply_text(
         lead
         + "Now send line items like:\n"
-        + "`Labour x 2 at $95`\n`Materials $45`\n\n"
+        + "`Garden tidy x 2 at $95`\n`Cleaning supplies $45`\n\n"
         + "You can send multiple lines at once, then use /generate.",
         parse_mode="Markdown",
     )
@@ -536,7 +536,7 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         return
     await update.message.reply_text(
         f"{DEVELOPMENT_NOTICE}\n\n"
-        "InvoiceBot helps tradies create invoices from voice or text in Telegram.\n\n"
+        "InvoiceBot helps small businesses and independent operators create invoices from voice or text in Telegram.\n\n"
         "Use /profile to set up your business, /template to pick a layout, and /invoice to start a draft."
     )
 
@@ -803,13 +803,13 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             replacement_items = parse_line_items(text)
         except ValueError as exc:
             await update.message.reply_text(
-                f"{exc}\n\nSend one replacement line item like:\n`Materials $45`",
+                f"{exc}\n\nSend one replacement line item like:\n`Cleaning supplies $45`",
                 parse_mode="Markdown",
             )
             return
         if len(replacement_items) != 1:
             await update.message.reply_text(
-                "Please send exactly one replacement line item, for example:\n`Labour x 2 at $95`",
+                "Please send exactly one replacement line item, for example:\n`Garden tidy x 2 at $95`",
                 parse_mode="Markdown",
             )
             return
@@ -1227,9 +1227,9 @@ async def _handle_voice_message(update: Update, context: ContextTypes.DEFAULT_TY
             f"Transcript:\n{transcript}\n\n"
             "You are still in the same invoice draft. Send another voice note or type the item manually.\n\n"
             "Try phrases like:\n"
-            "`Labour x 2 at $95`\n"
-            "`Labour twice at $95`\n"
-            "`Materials $45`",
+            "`Garden tidy x 2 at $95`\n"
+            "`Garden tidy twice at $95`\n"
+            "`Cleaning supplies $45`",
             parse_mode="Markdown",
         )
 
@@ -1528,8 +1528,8 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         await query.edit_message_text(
             "Text mode is still available in this draft.\n\n"
             "Send line items like:\n"
-            "Labour x 2 at $95\n"
-            "Materials $45"
+            "Garden tidy x 2 at $95\n"
+            "Cleaning supplies $45"
         )
         return
 

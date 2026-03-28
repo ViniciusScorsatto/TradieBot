@@ -33,7 +33,7 @@ export const invoiceTemplates: InvoiceTemplate[] = [
     name: "Graphite Pro",
     accent: "#2c3639",
     background: "#f3f4f6",
-    description: "Dark neutral look for premium trades and contractors."
+    description: "Dark neutral look for premium service businesses and contractors."
   },
   {
     id: "sunset-statement",
