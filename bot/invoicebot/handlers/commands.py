@@ -53,6 +53,14 @@ LOGO_MAX_HEIGHT = 5000
 ALLOWED_LOGO_MIME_TYPES = {"image/png", "image/jpeg"}
 CLIENTS_PAGE_SIZE = 6
 MAX_INVOICE_ITEMS = 14
+PROMOTION_CATEGORIES = (
+    ("tools", "Tools"),
+    ("vehicles", "Vehicles"),
+    ("fuel", "Fuel"),
+    ("insurance", "Insurance"),
+    ("accounting", "Accounting"),
+    ("software", "Software"),
+)
 
 
 def _user_key(update: Update) -> str:
@@ -224,6 +232,45 @@ def _support_type_keyboard() -> InlineKeyboardMarkup:
                 InlineKeyboardButton("Idea", callback_data="support_type:IDEA"),
             ],
         ]
+    )
+
+
+def _promotion_label(category_id: str) -> str:
+    for item_id, label in PROMOTION_CATEGORIES:
+        if item_id == category_id:
+            return label
+    return category_id.replace("-", " ").title()
+
+
+def _promotion_preferences_keyboard(selected: list[str]) -> InlineKeyboardMarkup:
+    selected_set = set(selected)
+    rows: list[list[InlineKeyboardButton]] = []
+    for index in range(0, len(PROMOTION_CATEGORIES), 2):
+        row: list[InlineKeyboardButton] = []
+        for category_id, label in PROMOTION_CATEGORIES[index:index + 2]:
+            prefix = "✓ " if category_id in selected_set else ""
+            row.append(
+                InlineKeyboardButton(
+                    f"{prefix}{label}",
+                    callback_data=f"promo_pref_toggle:{category_id}",
+                )
+            )
+        rows.append(row)
+    rows.append([InlineKeyboardButton("Turn all off", callback_data="promo_pref_clear")])
+    return InlineKeyboardMarkup(rows)
+
+
+async def _send_promotion_preferences(message: Message | None, context: ContextTypes.DEFAULT_TYPE, user_id: str, *, prefix: str | None = None) -> None:
+    if not message:
+        return
+    selected = _repo(context).list_promotion_preferences(user_id)
+    selected_labels = ", ".join(_promotion_label(category) for category in selected) if selected else "No promo categories selected"
+    lead = f"{prefix}\n\n" if prefix else ""
+    await message.reply_text(
+        lead
+        + "Choose the kinds of affiliate offers you'd like to receive in Telegram.\n\n"
+        + f"Current preferences: {selected_labels}",
+        reply_markup=_promotion_preferences_keyboard(selected),
     )
 
 
@@ -563,7 +610,7 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     await update.message.reply_text(
         f"{DEVELOPMENT_NOTICE}\n\n"
         "InvoiceBot helps small businesses and independent operators create invoices from voice or text in Telegram.\n\n"
-        "Use /profile to set up your business, /template to pick a layout, and /invoice to start a draft."
+        "Use /profile to set up your business, /template to pick a layout, /invoice to start a draft, and /promotions to control affiliate offers."
     )
 
 
@@ -771,6 +818,13 @@ async def support_command(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         "What kind of ticket do you want to send?",
         reply_markup=_support_type_keyboard(),
     )
+
+
+async def promotions_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if not _is_user_allowed(update, context):
+        await _deny_access(update, context)
+        return
+    await _send_promotion_preferences(update.message, context, _user_key(update))
 
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -1318,6 +1372,31 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         await query.edit_message_text(
             f"{support_type.title()} selected.\n\nSend a short subject line so the ticket is easy to scan in admin."
         )
+        return
+
+    if query.data.startswith("promo_pref_toggle:"):
+        category_id = query.data.split(":", 1)[1]
+        valid_category_ids = {item_id for item_id, _ in PROMOTION_CATEGORIES}
+        if category_id not in valid_category_ids:
+            await query.edit_message_text("That promotion category is no longer available.")
+            return
+        selected = repo.list_promotion_preferences(user_id)
+        selected_set = set(selected)
+        if category_id in selected_set:
+            selected_set.remove(category_id)
+            message = f"Removed {_promotion_label(category_id)} promotions."
+        else:
+            selected_set.add(category_id)
+            message = f"Added {_promotion_label(category_id)} promotions."
+        repo.save_promotion_preferences(user_id, sorted(selected_set))
+        await query.edit_message_text(message)
+        await _send_promotion_preferences(query.message, context, user_id)
+        return
+
+    if query.data == "promo_pref_clear":
+        repo.save_promotion_preferences(user_id, [])
+        await query.edit_message_text("Turned off affiliate promotions for this account.")
+        await _send_promotion_preferences(query.message, context, user_id)
         return
 
     if query.data == "client_edit_done":

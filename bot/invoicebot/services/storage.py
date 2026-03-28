@@ -30,6 +30,8 @@ class Repository(Protocol):
     def delete_client(self, user_id: str, client_id: str) -> bool: ...
     def list_history(self, user_id: str) -> list[InvoiceDraft]: ...
     def record_ticket(self, ticket: SupportTicket) -> None: ...
+    def list_promotion_preferences(self, user_id: str) -> list[str]: ...
+    def save_promotion_preferences(self, user_id: str, categories: list[str]) -> None: ...
     def invoice_count_this_month(self, user_id: str) -> int: ...
     def paid_credits(self, user_id: str) -> int: ...
     def paid_voice_credits(self, user_id: str) -> int: ...
@@ -55,6 +57,7 @@ class InMemoryRepository:
         self.voice_counts: DefaultDict[str, int] = defaultdict(int)
         self.stripe_customers: dict[str, str] = {}
         self.tickets: DefaultDict[str, list[SupportTicket]] = defaultdict(list)
+        self.promotion_preferences: DefaultDict[str, set[str]] = defaultdict(set)
 
     def get_or_create_profile(self, user_id: str) -> Profile:
         profile = self.profiles.get(user_id)
@@ -124,6 +127,12 @@ class InMemoryRepository:
     def record_ticket(self, ticket: SupportTicket) -> None:
         self.tickets[ticket.user_id].append(ticket)
 
+    def list_promotion_preferences(self, user_id: str) -> list[str]:
+        return sorted(self.promotion_preferences[user_id])
+
+    def save_promotion_preferences(self, user_id: str, categories: list[str]) -> None:
+        self.promotion_preferences[user_id] = set(categories)
+
     def invoice_count_this_month(self, user_id: str) -> int:
         return self.invoice_counts[user_id]
 
@@ -179,6 +188,9 @@ class PostgresRepository:
             "tickets": {"id", "user_id", "type", "status", "subject"},
             "ticket_messages": {"id", "ticket_id", "sender", "body"},
             "payments": {"id", "user_id", "stripe_session_id", "stripe_payment_id", "purchase_type", "amount_cents", "credits_purchased", "status"},
+            "promotion_preferences": {"id", "user_id", "category", "created_at"},
+            "promotion_campaigns": {"id", "category", "title", "body", "affiliate_url", "status", "created_at"},
+            "promotion_deliveries": {"id", "campaign_id", "user_id", "telegram_user_id", "status", "created_at"},
         }
         with self._connect() as conn, conn.cursor() as cur:
             cur.execute(
@@ -712,6 +724,35 @@ class PostgresRepository:
                 """,
                 (str(uuid4()), ticket_id, "telegram_user", ticket.body),
             )
+            conn.commit()
+
+    def list_promotion_preferences(self, user_id: str) -> list[str]:
+        user = self._ensure_user(user_id)
+        with self._connect() as conn, conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT category
+                FROM promotion_preferences
+                WHERE user_id = %s
+                ORDER BY category ASC
+                """,
+                (user["id"],),
+            )
+            return [row["category"] for row in cur.fetchall()]
+
+    def save_promotion_preferences(self, user_id: str, categories: list[str]) -> None:
+        user = self._ensure_user(user_id)
+        unique_categories = sorted({category for category in categories if category})
+        with self._connect() as conn, conn.cursor() as cur:
+            cur.execute("DELETE FROM promotion_preferences WHERE user_id = %s", (user["id"],))
+            for category in unique_categories:
+                cur.execute(
+                    """
+                    INSERT INTO promotion_preferences (id, user_id, category)
+                    VALUES (%s, %s, %s)
+                    """,
+                    (str(uuid4()), user["id"], category),
+                )
             conn.commit()
 
     def invoice_count_this_month(self, user_id: str) -> int:

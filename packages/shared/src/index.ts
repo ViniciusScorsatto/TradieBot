@@ -53,6 +53,21 @@ export const pricing = {
   voiceNoteMaxSeconds: 60
 };
 
+export type PromotionCategory = {
+  id: string;
+  label: string;
+  description: string;
+};
+
+export const promotionCategories: PromotionCategory[] = [
+  { id: "tools", label: "Tools", description: "Hardware, gear, and business equipment offers." },
+  { id: "vehicles", label: "Vehicles", description: "Utes, vans, leasing, and vehicle upkeep deals." },
+  { id: "fuel", label: "Fuel", description: "Fuel cards, discounts, and running-cost promotions." },
+  { id: "insurance", label: "Insurance", description: "Business, vehicle, and liability cover offers." },
+  { id: "accounting", label: "Accounting", description: "Bookkeeping, tax, and accounting service offers." },
+  { id: "software", label: "Software", description: "Apps, tools, and workflow software promotions." }
+];
+
 export const siteConfig = {
   brandName: "InvoiceBot",
   botDeepLink: process.env.NEXT_PUBLIC_TELEGRAM_BOT_URL ?? "https://t.me/your_bot"

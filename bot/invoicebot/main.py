@@ -16,6 +16,7 @@ from invoicebot.handlers.commands import (
     myid_command,
     new_client_command,
     profile_command,
+    promotions_command,
     repeat_command,
     start_command,
     support_command,
@@ -45,6 +46,7 @@ def build_application() -> Application:
     application.add_handler(CommandHandler("history", history_command))
     application.add_handler(CommandHandler("repeat", repeat_command))
     application.add_handler(CommandHandler("support", support_command))
+    application.add_handler(CommandHandler("promotions", promotions_command))
     application.add_handler(CallbackQueryHandler(handle_callback))
     application.add_handler(
         MessageHandler((filters.TEXT | filters.VOICE | filters.AUDIO | filters.PHOTO | filters.Document.IMAGE) & ~filters.COMMAND, handle_message)

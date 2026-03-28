@@ -27,6 +27,8 @@ model User {
   invoices                     Invoice[]
   tickets                      Ticket[]
   payments                     Payment[]
+  promotionPreferences         PromotionPreference[]
+  promotionDeliveries          PromotionDelivery[]
 
   @@map("users")
 }
@@ -174,6 +176,47 @@ model Payment {
   user             User          @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("payments")
+}
+
+model PromotionPreference {
+  id        String   @id @default(cuid())
+  userId    String   @map("user_id")
+  category  String
+  createdAt DateTime @default(now()) @map("created_at")
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, category])
+  @@map("promotion_preferences")
+}
+
+model PromotionCampaign {
+  id           String              @id @default(cuid())
+  category     String
+  title        String
+  body         String
+  affiliateUrl String             @map("affiliate_url")
+  status       String             @default("DRAFT")
+  createdBy    String?            @map("created_by")
+  createdAt    DateTime           @default(now()) @map("created_at")
+  sentAt       DateTime?          @map("sent_at")
+  deliveries   PromotionDelivery[]
+
+  @@map("promotion_campaigns")
+}
+
+model PromotionDelivery {
+  id             String            @id @default(cuid())
+  campaignId     String            @map("campaign_id")
+  userId         String            @map("user_id")
+  telegramUserId String            @map("telegram_user_id")
+  status         String            @default("PENDING")
+  errorMessage   String?           @map("error_message")
+  deliveredAt    DateTime?         @map("delivered_at")
+  createdAt      DateTime          @default(now()) @map("created_at")
+  campaign       PromotionCampaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  user           User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("promotion_deliveries")
 }
 
 model AdminUser {
