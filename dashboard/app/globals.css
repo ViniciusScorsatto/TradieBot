@@ -202,6 +202,22 @@ a {
   box-shadow: var(--shadow);
 }
 
+.topbarSignout {
+  padding: 10px 14px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: white;
+  color: var(--text);
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: var(--shadow);
+}
+
+.topbarSignout:hover {
+  border-color: rgba(255, 106, 61, 0.28);
+}
+
 .statusDot {
   width: 8px;
   height: 8px;

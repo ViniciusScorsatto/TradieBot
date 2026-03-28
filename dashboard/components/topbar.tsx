@@ -1,6 +1,7 @@
 "use client";
 
 import { usePathname } from "next/navigation";
+import { signOutAction } from "../app/auth-actions";
 
 const titles: Record<string, { title: string; subtitle: string }> = {
   "/": { title: "Dashboard", subtitle: "Operations snapshot across billing, support, and usage." },
@@ -13,6 +14,7 @@ const titles: Record<string, { title: string; subtitle: string }> = {
 export function Topbar() {
   const pathname = usePathname();
   const content = titles[pathname] ?? titles["/"];
+  const showAuthActions = pathname !== "/login";
 
   return (
     <header className="topbar">
@@ -26,6 +28,13 @@ export function Topbar() {
           <span className="statusDot" />
           Production-ready shell
         </div>
+        {showAuthActions ? (
+          <form action={signOutAction}>
+            <button className="topbarSignout" type="submit">
+              Sign out
+            </button>
+          </form>
+        ) : null}
         <div className="topbarAvatar">IB</div>
       </div>
     </header>
