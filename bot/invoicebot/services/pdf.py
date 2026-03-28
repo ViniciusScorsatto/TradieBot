@@ -122,8 +122,6 @@ def _draw_table_header(pdf: canvas.Canvas, *, page_left: float, page_right: floa
     pdf.drawString(page_left + 382, table_top - 12, "Disc")
     pdf.drawString(page_left + 432, table_top - 12, "GST")
     pdf.drawRightString(page_right - 8, table_top - 12, "Subtotal")
-    pdf.setFont("Helvetica", 8)
-    pdf.drawRightString(page_right - 8, table_top - 2, "NZD")
 
 
 def _draw_items_table(pdf: canvas.Canvas, items: list, profile: Profile, *, page_left: float, page_right: float, table_top: float) -> float:
@@ -139,9 +137,9 @@ def _draw_items_table(pdf: canvas.Canvas, items: list, profile: Profile, *, page
         pdf.drawString(page_left + 334, y, _money_unit(item.unit_price_cents))
         if item.discount_cents:
             if item.discount_percent is not None:
-                discount_text = f"{item.discount_percent:g}%"
+                discount_text = f"-{item.discount_percent:g}%"
             else:
-                discount_text = _money(item.discount_cents)
+                discount_text = f"-{_money(item.discount_cents)}"
             pdf.drawString(page_left + 382, y, discount_text)
         else:
             pdf.drawString(page_left + 382, y, "-")
@@ -168,6 +166,8 @@ def _draw_summary(
     pdf.setFillColor(colors.HexColor("#535862"))
     pdf.setFont("Helvetica-Bold", 11)
     pdf.drawCentredString(summary_x + (summary_width / 2), summary_title_y - 12, "Invoice Summary")
+    pdf.setFont("Helvetica", 8)
+    pdf.drawRightString(page_right - 8, summary_title_y - 4, "NZD")
 
     line_y = summary_title_y - 44
     summary_rows = [
