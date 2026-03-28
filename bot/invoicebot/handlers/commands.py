@@ -17,6 +17,7 @@ from invoicebot.services.mock_data import seed_mock_clients
 from invoicebot.services.parser import parse_line_items
 from invoicebot.services.pdf import render_invoice_pdf
 from invoicebot.services.storage import Repository
+from invoicebot.services.tax import gst_cents, gst_summary_label, total_cents
 from invoicebot.services.template_catalog import TEMPLATES
 from invoicebot.services.transcription import transcribe_audio_file
 
@@ -547,6 +548,7 @@ async def generate_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     if not draft or not draft.items:
         await update.message.reply_text("Start with /invoice and add at least one line item first.")
         return
+    profile = repo.get_or_create_profile(user_id)
     client = repo.get_client(user_id, draft.client_id) if draft.client_id else None
 
     decision = evaluate_quota(
@@ -576,7 +578,9 @@ async def generate_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         f"Please confirm this invoice:\n\n"
         f"Client: {client.name if client else 'No client selected'}\n\n"
         f"{lines}\n\n"
-        f"Subtotal: ${draft.subtotal_cents / 100:.2f}\nGST: ${draft.gst_cents / 100:.2f}\nTotal: ${draft.total_cents / 100:.2f}",
+        f"Subtotal: ${draft.subtotal_cents / 100:.2f}\n"
+        f"{gst_summary_label(profile)}: ${gst_cents(draft, profile) / 100:.2f}\n"
+        f"Total: ${total_cents(draft, profile) / 100:.2f}",
         reply_markup=keyboard,
     )
 
@@ -606,6 +610,20 @@ def _profile_step_prompt(profile, field: str, label: str, next_text: str) -> str
     if current_value:
         return f"Saved. Current {label}: {current_value}\n{next_text}, or keep the current one."
     return f"Saved. {next_text}."
+
+
+def _gst_prompt(profile) -> str:
+    return _profile_step_prompt(
+        profile,
+        "gst_number",
+        "GST number",
+        "Now send your GST number. If you are not GST-registered, keep it blank and the bot will not add GST to invoices",
+    )
+
+
+def _gst_skip_keyboard(profile):
+    label = "Keep current" if profile.gst_number else "No GST number"
+    return _skip_keyboard("profile_gst_number", label=label)
 
 
 async def template_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -856,9 +874,9 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         repo.save_profile(user_id, profile)
         context.user_data["mode"] = "profile_gst_number"
         await update.message.reply_text(
-            _profile_step_prompt(profile, "gst_number", "GST number", "Now send your GST number"),
+            _gst_prompt(profile),
             parse_mode="Markdown",
-            reply_markup=_skip_keyboard("profile_gst_number", label="Keep current") if profile.gst_number else None,
+            reply_markup=_gst_skip_keyboard(profile),
         )
         return
 
@@ -866,7 +884,10 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         profile = repo.get_or_create_profile(user_id)
         if text.lower() != "skip" and not await _validate_text_length(update.message, "GST number", text):
             return
-        if text.lower() != "skip" or not profile.gst_number:
+        if text.lower() == "skip":
+            if not profile.gst_number:
+                profile.gst_number = ""
+        else:
             profile.gst_number = text
         repo.save_profile(user_id, profile)
         context.user_data["mode"] = "profile_logo"
@@ -1211,15 +1232,18 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             profile = repo.get_or_create_profile(user_id)
             await query.edit_message_text("Keeping current phone.")
             await query.message.reply_text(
-                _profile_step_prompt(profile, "gst_number", "GST number", "Now send your GST number"),
+                _gst_prompt(profile),
                 parse_mode="Markdown",
-                reply_markup=_skip_keyboard("profile_gst_number", label="Keep current") if profile.gst_number else None,
+                reply_markup=_gst_skip_keyboard(profile),
             )
             return
         if step == "profile_gst_number":
             context.user_data["mode"] = "profile_logo"
             profile = repo.get_or_create_profile(user_id)
-            await query.edit_message_text("Keeping current GST number.")
+            if profile.gst_number:
+                await query.edit_message_text("Keeping current GST number.")
+            else:
+                await query.edit_message_text("Skipping GST number. GST will not be added to invoices.")
             logo_text, keyboard = _logo_prompt(profile)
             await query.message.reply_text(logo_text, reply_markup=keyboard)
             return

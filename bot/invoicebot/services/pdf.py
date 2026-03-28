@@ -10,6 +10,7 @@ from reportlab.lib.utils import ImageReader
 from reportlab.pdfgen import canvas
 
 from invoicebot.models import Client, InvoiceDraft, Profile
+from invoicebot.services.tax import gst_cents, gst_label, gst_summary_label, total_cents
 from invoicebot.services.template_catalog import get_template
 
 ROWS_PER_PAGE = 7
@@ -41,7 +42,7 @@ def _draw_wrapped_lines(pdf: canvas.Canvas, x: float, y: float, lines: list[str]
 
 
 def _money(cents: int) -> str:
-    return f"NZD {cents / 100:,.2f}"
+    return f"{cents / 100:,.2f}"
 
 
 def _money_unit(cents: int) -> str:
@@ -118,11 +119,13 @@ def _draw_table_header(pdf: canvas.Canvas, *, page_left: float, page_right: floa
     pdf.drawString(page_left + 8, table_top - 12, "Item")
     pdf.drawString(page_left + 246, table_top - 12, "HRS/QTY")
     pdf.drawString(page_left + 324, table_top - 12, "Rate")
-    pdf.drawString(page_left + 400, table_top - 12, "Tax")
+    pdf.drawString(page_left + 400, table_top - 12, "GST")
     pdf.drawRightString(page_right - 8, table_top - 12, "Subtotal")
+    pdf.setFont("Helvetica", 8)
+    pdf.drawRightString(page_right - 8, table_top - 2, "NZD")
 
 
-def _draw_items_table(pdf: canvas.Canvas, items: list, *, page_left: float, page_right: float, table_top: float) -> float:
+def _draw_items_table(pdf: canvas.Canvas, items: list, profile: Profile, *, page_left: float, page_right: float, table_top: float) -> float:
     y = table_top - 34
     row_height = 42
     for item in items:
@@ -133,13 +136,22 @@ def _draw_items_table(pdf: canvas.Canvas, items: list, *, page_left: float, page
         _draw_wrapped_lines(pdf, page_left + 8, y, [item.description], width=225, step=11)
         pdf.drawString(page_left + 260, y, f"{item.quantity:g}")
         pdf.drawString(page_left + 334, y, _money_unit(item.unit_price_cents))
-        pdf.drawString(page_left + 404, y, "GST(15%)")
+        pdf.drawString(page_left + 404, y, gst_label(profile))
         pdf.drawRightString(page_right - 8, y, _money(item.line_total_cents))
         y -= row_height
     return y
 
 
-def _draw_summary(pdf: canvas.Canvas, draft: InvoiceDraft, *, page_left: float, page_right: float, content_width: float, summary_title_y: float) -> None:
+def _draw_summary(
+    pdf: canvas.Canvas,
+    draft: InvoiceDraft,
+    profile: Profile,
+    *,
+    page_left: float,
+    page_right: float,
+    content_width: float,
+    summary_title_y: float,
+) -> None:
     summary_x = page_left + 275
     summary_width = content_width - 275
     pdf.setFillColor(colors.HexColor("#f1f3f6"))
@@ -151,8 +163,8 @@ def _draw_summary(pdf: canvas.Canvas, draft: InvoiceDraft, *, page_left: float, 
     line_y = summary_title_y - 44
     summary_rows = [
         ("Subtotal", draft.subtotal_cents),
-        ("GST(15%)", draft.gst_cents),
-        ("Total", draft.total_cents),
+        (gst_summary_label(profile), gst_cents(draft, profile)),
+        ("Total", total_cents(draft, profile)),
     ]
     for label, amount in summary_rows:
         pdf.setStrokeColor(colors.HexColor("#e5e7eb"))
@@ -268,7 +280,7 @@ def render_invoice_pdf(profile: Profile, draft: InvoiceDraft, client: Client | N
     table_top = meta_y - 52
     item_pages = [draft.items[index:index + ROWS_PER_PAGE] for index in range(0, len(draft.items), ROWS_PER_PAGE)]
     _draw_table_header(pdf, page_left=page_left, page_right=page_right, content_width=content_width, table_top=table_top)
-    y = _draw_items_table(pdf, item_pages[0], page_left=page_left, page_right=page_right, table_top=table_top)
+    y = _draw_items_table(pdf, item_pages[0], profile, page_left=page_left, page_right=page_right, table_top=table_top)
 
     if len(item_pages) == 2:
         pdf.setFillColor(colors.HexColor("#636a73"))
@@ -287,9 +299,17 @@ def render_invoice_pdf(profile: Profile, draft: InvoiceDraft, client: Client | N
 
         table_top = height - 108
         _draw_table_header(pdf, page_left=page_left, page_right=page_right, content_width=content_width, table_top=table_top)
-        y = _draw_items_table(pdf, item_pages[1], page_left=page_left, page_right=page_right, table_top=table_top)
+        y = _draw_items_table(pdf, item_pages[1], profile, page_left=page_left, page_right=page_right, table_top=table_top)
 
-    _draw_summary(pdf, draft, page_left=page_left, page_right=page_right, content_width=content_width, summary_title_y=y - 4)
+    _draw_summary(
+        pdf,
+        draft,
+        profile,
+        page_left=page_left,
+        page_right=page_right,
+        content_width=content_width,
+        summary_title_y=y - 4,
+    )
 
     pdf.showPage()
     pdf.save()

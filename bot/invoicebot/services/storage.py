@@ -9,6 +9,7 @@ from typing import Any, DefaultDict, Protocol
 from uuid import uuid4
 
 from invoicebot.models import Client, InvoiceDraft, InvoiceItem, Profile, SupportTicket
+from invoicebot.services.tax import gst_cents, subtotal_cents, total_cents
 
 
 def _utcnow() -> datetime:
@@ -514,6 +515,10 @@ class PostgresRepository:
 
     def save_draft(self, draft: InvoiceDraft) -> InvoiceDraft:
         user = self._ensure_user(draft.user_id)
+        profile = self.get_or_create_profile(draft.user_id)
+        draft_subtotal = subtotal_cents(draft)
+        draft_gst = gst_cents(draft, profile)
+        draft_total = total_cents(draft, profile)
         with self._connect() as conn, conn.cursor() as cur:
             draft_row = self._active_draft_row(cur, user["id"])
             draft_id = draft_row["id"] if draft_row else str(uuid4())
@@ -527,9 +532,9 @@ class PostgresRepository:
                     (
                         draft.client_id,
                         draft.notes,
-                        draft.subtotal_cents,
-                        draft.gst_cents,
-                        draft.total_cents,
+                        draft_subtotal,
+                        draft_gst,
+                        draft_total,
                         draft_id,
                     ),
                 )
@@ -547,9 +552,9 @@ class PostgresRepository:
                         user["id"],
                         draft.client_id,
                         draft.notes,
-                        draft.subtotal_cents,
-                        draft.gst_cents,
-                        draft.total_cents,
+                        draft_subtotal,
+                        draft_gst,
+                        draft_total,
                     ),
                 )
             for item in draft.items:
@@ -587,6 +592,9 @@ class PostgresRepository:
             )
             invoice_id = str(uuid4())
             invoice_number = f"{profile.invoice_prefix}-{profile.next_invoice_number:04d}"
+            draft_subtotal = subtotal_cents(draft)
+            draft_gst = gst_cents(draft, profile)
+            draft_total = total_cents(draft, profile)
             cur.execute(
                 """
                 INSERT INTO invoices (
@@ -612,9 +620,9 @@ class PostgresRepository:
                     ),
                     invoice_number,
                     profile.default_template_id,
-                    draft.subtotal_cents,
-                    draft.gst_cents,
-                    draft.total_cents,
+                    draft_subtotal,
+                    draft_gst,
+                    draft_total,
                     draft.notes,
                 ),
             )
