@@ -10,7 +10,7 @@ from reportlab.lib.utils import ImageReader
 from reportlab.pdfgen import canvas
 
 from invoicebot.models import Client, InvoiceDraft, Profile
-from invoicebot.services.tax import gst_cents, gst_label, gst_summary_label, total_cents
+from invoicebot.services.tax import discount_total_cents, gross_subtotal_cents, gst_cents, gst_label, gst_summary_label, total_cents
 from invoicebot.services.template_catalog import get_template
 
 ROWS_PER_PAGE = 7
@@ -119,7 +119,8 @@ def _draw_table_header(pdf: canvas.Canvas, *, page_left: float, page_right: floa
     pdf.drawString(page_left + 8, table_top - 12, "Item")
     pdf.drawString(page_left + 246, table_top - 12, "HRS/QTY")
     pdf.drawString(page_left + 324, table_top - 12, "Rate")
-    pdf.drawString(page_left + 400, table_top - 12, "GST")
+    pdf.drawString(page_left + 382, table_top - 12, "Disc")
+    pdf.drawString(page_left + 432, table_top - 12, "GST")
     pdf.drawRightString(page_right - 8, table_top - 12, "Subtotal")
     pdf.setFont("Helvetica", 8)
     pdf.drawRightString(page_right - 8, table_top - 2, "NZD")
@@ -133,10 +134,18 @@ def _draw_items_table(pdf: canvas.Canvas, items: list, profile: Profile, *, page
         pdf.line(page_left, y - 18, page_right, y - 18)
         pdf.setFillColor(colors.black)
         pdf.setFont("Helvetica", 10)
-        _draw_wrapped_lines(pdf, page_left + 8, y, [item.description], width=225, step=11)
+        _draw_wrapped_lines(pdf, page_left + 8, y, [item.description], width=205, step=11)
         pdf.drawString(page_left + 260, y, f"{item.quantity:g}")
         pdf.drawString(page_left + 334, y, _money_unit(item.unit_price_cents))
-        pdf.drawString(page_left + 404, y, gst_label(profile))
+        if item.discount_cents:
+            if item.discount_percent is not None:
+                discount_text = f"{item.discount_percent:g}%"
+            else:
+                discount_text = _money(item.discount_cents)
+            pdf.drawString(page_left + 382, y, discount_text)
+        else:
+            pdf.drawString(page_left + 382, y, "-")
+        pdf.drawString(page_left + 436, y, gst_label(profile))
         pdf.drawRightString(page_right - 8, y, _money(item.line_total_cents))
         y -= row_height
     return y
@@ -162,10 +171,14 @@ def _draw_summary(
 
     line_y = summary_title_y - 44
     summary_rows = [
-        ("Subtotal", draft.subtotal_cents),
+        ("Subtotal", gross_subtotal_cents(draft)),
+    ]
+    if discount_total_cents(draft):
+        summary_rows.append(("Discounts", -discount_total_cents(draft)))
+    summary_rows.extend([
         (gst_summary_label(profile), gst_cents(draft, profile)),
         ("Total", total_cents(draft, profile)),
-    ]
+    ])
     for label, amount in summary_rows:
         pdf.setStrokeColor(colors.HexColor("#e5e7eb"))
         pdf.line(summary_x, line_y - 8, page_right, line_y - 8)

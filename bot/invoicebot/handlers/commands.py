@@ -10,14 +10,14 @@ from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Message, Update
 from telegram.ext import ContextTypes
 from PIL import Image
 
-from invoicebot.models import SupportTicket
+from invoicebot.models import InvoiceItem, SupportTicket
 from invoicebot.services.billing import evaluate_quota
 from invoicebot.services.checkout import create_checkout_session
 from invoicebot.services.mock_data import seed_mock_clients
 from invoicebot.services.parser import parse_line_items
 from invoicebot.services.pdf import render_invoice_pdf
 from invoicebot.services.storage import Repository
-from invoicebot.services.tax import gst_cents, gst_summary_label, total_cents
+from invoicebot.services.tax import discount_total_cents, gst_cents, gst_summary_label, gross_subtotal_cents, total_cents
 from invoicebot.services.template_catalog import TEMPLATES
 from invoicebot.services.transcription import transcribe_audio_file
 
@@ -208,7 +208,42 @@ def _skip_keyboard(step: str, *, label: str = "Skip") -> InlineKeyboardMarkup:
 
 
 def _item_line(item, index: int) -> str:
-    return f"{index + 1}. {item.description}: {item.quantity:g} x ${item.unit_price_cents / 100:.2f}"
+    return f"{index + 1}. {_item_line_body(item)}"
+
+
+def _item_line_body(item: InvoiceItem) -> str:
+    line = f"{item.description}: {item.quantity:g} x ${item.unit_price_cents / 100:.2f}"
+    if item.discount_cents:
+        line += f", {_discount_label(item)}"
+    line += f" = ${item.line_total_cents / 100:.2f}"
+    return line
+
+
+def _discount_label(item: InvoiceItem) -> str:
+    if item.discount_percent is not None:
+        return f"discount {item.discount_percent:g}% (-${item.discount_cents / 100:.2f})"
+    return f"discount ${item.discount_cents / 100:.2f}"
+
+
+def _discount_value_for_prompt(item: InvoiceItem) -> str:
+    if item.discount_percent is not None:
+        return f"{item.discount_percent:g}%"
+    return f"${item.discount_cents / 100:.2f}"
+
+
+def _build_discounted_item(item: InvoiceItem, *, discount_cents: int, discount_percent: float | None) -> InvoiceItem:
+    return InvoiceItem(
+        description=item.description,
+        quantity=item.quantity,
+        unit_price_cents=item.unit_price_cents,
+        discount_cents=discount_cents,
+        discount_percent=discount_percent,
+    )
+
+
+def _parse_discount_amount(raw_text: str) -> float:
+    cleaned = raw_text.strip().replace("$", "").replace("%", "")
+    return float(cleaned)
 
 
 def _client_summary(client) -> str:
@@ -380,6 +415,12 @@ def _draft_editor_keyboard(draft) -> InlineKeyboardMarkup:
             [
                 InlineKeyboardButton(f"Edit {index + 1}", callback_data=f"edit_item:{index}"),
                 InlineKeyboardButton(f"Delete {index + 1}", callback_data=f"delete_item:{index}"),
+            ]
+        )
+        rows.append(
+            [
+                InlineKeyboardButton("Discount %", callback_data=f"discount_pct:{index}"),
+                InlineKeyboardButton("Discount value", callback_data=f"discount_value:{index}"),
             ]
         )
     return InlineKeyboardMarkup(rows)
@@ -566,21 +607,21 @@ async def generate_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         )
         return
 
-    lines = "\n".join(
-        f"- {item.description}: {item.quantity:g} x ${item.unit_price_cents / 100:.2f} = ${item.line_total_cents / 100:.2f}"
-        for item in draft.items
-    )
+    lines = "\n".join(f"- {_item_line_body(item)}" for item in draft.items)
     keyboard = InlineKeyboardMarkup(
         [[InlineKeyboardButton("Yes, generate PDF", callback_data="confirm_generate")],
          [InlineKeyboardButton("Edit draft", callback_data="edit_draft")]]
     )
+    summary_lines = [f"Subtotal: ${gross_subtotal_cents(draft) / 100:.2f}"]
+    if discount_total_cents(draft):
+        summary_lines.append(f"Discounts: -${discount_total_cents(draft) / 100:.2f}")
+    summary_lines.append(f"{gst_summary_label(profile)}: ${gst_cents(draft, profile) / 100:.2f}")
+    summary_lines.append(f"Total: ${total_cents(draft, profile) / 100:.2f}")
     await update.message.reply_text(
         f"Please confirm this invoice:\n\n"
         f"Client: {client.name if client else 'No client selected'}\n\n"
         f"{lines}\n\n"
-        f"Subtotal: ${draft.subtotal_cents / 100:.2f}\n"
-        f"{gst_summary_label(profile)}: ${gst_cents(draft, profile) / 100:.2f}\n"
-        f"Total: ${total_cents(draft, profile) / 100:.2f}",
+        + "\n".join(summary_lines),
         reply_markup=keyboard,
     )
 
@@ -663,12 +704,13 @@ async def history_command(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         await _deny_access(update, context)
         return
     repo = _repo(context)
+    profile = repo.get_or_create_profile(_user_key(update))
     history = repo.list_history(_user_key(update))
     if not history:
         await update.message.reply_text("No invoices generated yet.")
         return
     lines = [
-        f"{index + 1}. {draft.items[0].description if draft.items else 'Invoice'} - ${draft.total_cents / 100:.2f}"
+        f"{index + 1}. {draft.items[0].description if draft.items else 'Invoice'} - ${total_cents(draft, profile) / 100:.2f}"
         for index, draft in enumerate(history[:10])
     ]
     await update.message.reply_text("Recent invoices:\n" + "\n".join(lines))
@@ -767,6 +809,62 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         context.user_data.pop("edit_item_index", None)
         await update.message.reply_text(
             f"Updated item {item_index + 1}.\n\n{_item_line(replacement_items[0], item_index)}",
+            reply_markup=_draft_editor_keyboard(draft),
+        )
+        return
+
+    if mode in {"discount_percent_item", "discount_value_item"}:
+        draft = repo.get_draft(user_id)
+        item_index = context.user_data.get("discount_item_index")
+        if draft is None or item_index is None or not (0 <= item_index < len(draft.items)):
+            context.user_data["mode"] = "invoice_items"
+            context.user_data.pop("discount_item_index", None)
+            context.user_data.pop("discount_kind", None)
+            await update.message.reply_text("That draft item is no longer available. Use /invoice to continue.")
+            return
+
+        item = draft.items[item_index]
+        try:
+            amount = _parse_discount_amount(text)
+        except ValueError:
+            prompt = "Send a percentage like `10` or `10%`." if mode == "discount_percent_item" else "Send a value like `10` or `$10`."
+            await update.message.reply_text(prompt + "\nSend `0` to remove the discount.", parse_mode="Markdown")
+            return
+
+        if amount < 0:
+            await update.message.reply_text("Discounts cannot be negative.")
+            return
+
+        if mode == "discount_percent_item":
+            if amount > 100:
+                await update.message.reply_text("Percentage discounts must be 100 or less.")
+                return
+            discount_cents = int(round(item.gross_total_cents * (amount / 100)))
+            discount_percent = float(amount) if amount else None
+        else:
+            discount_cents = int(round(amount * 100))
+            if discount_cents > item.gross_total_cents:
+                await update.message.reply_text(
+                    f"That discount is bigger than the line value (${item.gross_total_cents / 100:.2f})."
+                )
+                return
+            discount_percent = None
+
+        updated_item = _build_discounted_item(
+            item,
+            discount_cents=discount_cents,
+            discount_percent=discount_percent,
+        )
+        draft.items[item_index] = updated_item
+        repo.save_draft(draft)
+        context.user_data["mode"] = "invoice_items"
+        context.user_data.pop("discount_item_index", None)
+        context.user_data.pop("discount_kind", None)
+        await update.message.reply_text(
+            (
+                f"{'Removed' if discount_cents == 0 else 'Updated'} discount for item {item_index + 1}.\n\n"
+                f"{_item_line(updated_item, item_index)}"
+            ),
             reply_markup=_draft_editor_keyboard(draft),
         )
         return
@@ -1372,6 +1470,45 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             f"Deleted item {item_index + 1}: {removed_item.description}."
         )
         await _send_draft_editor(query.message, draft)
+        return
+
+    if query.data.startswith("discount_pct:"):
+        draft = repo.get_draft(user_id)
+        item_index = int(query.data.split(":", 1)[1])
+        if not draft or not (0 <= item_index < len(draft.items)):
+            await query.edit_message_text("That item is no longer available. Use /invoice to continue.")
+            return
+        item = draft.items[item_index]
+        context.user_data["mode"] = "discount_percent_item"
+        context.user_data["discount_item_index"] = item_index
+        await query.edit_message_text(
+            "Send the discount percentage for this line item.\n\n"
+            f"{_item_line(item, item_index)}\n\n"
+            f"Current discount: {_discount_value_for_prompt(item) if item.discount_cents else 'none'}\n"
+            "Examples: `10` or `10%`\n"
+            "Send `0` to remove the discount.",
+            parse_mode="Markdown",
+        )
+        return
+
+    if query.data.startswith("discount_value:"):
+        draft = repo.get_draft(user_id)
+        item_index = int(query.data.split(":", 1)[1])
+        if not draft or not (0 <= item_index < len(draft.items)):
+            await query.edit_message_text("That item is no longer available. Use /invoice to continue.")
+            return
+        item = draft.items[item_index]
+        context.user_data["mode"] = "discount_value_item"
+        context.user_data["discount_item_index"] = item_index
+        await query.edit_message_text(
+            "Send the discount value for this line item.\n\n"
+            f"{_item_line(item, item_index)}\n\n"
+            f"Current discount: {_discount_value_for_prompt(item) if item.discount_cents else 'none'}\n"
+            f"The discount cannot be more than the line value (${item.gross_total_cents / 100:.2f}).\n"
+            "Examples: `10` or `$10`\n"
+            "Send `0` to remove the discount.",
+            parse_mode="Markdown",
+        )
         return
 
     if query.data == "voice_continue_text":

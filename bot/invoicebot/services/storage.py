@@ -238,6 +238,8 @@ class PostgresRepository:
               description TEXT NOT NULL,
               quantity DOUBLE PRECISION NOT NULL DEFAULT 1,
               unit_price INTEGER NOT NULL,
+              discount_cents INTEGER NOT NULL DEFAULT 0,
+              discount_percent DOUBLE PRECISION,
               line_total INTEGER NOT NULL,
               created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
             )
@@ -265,6 +267,8 @@ class PostgresRepository:
               description TEXT NOT NULL,
               quantity DOUBLE PRECISION NOT NULL,
               unit_price INTEGER NOT NULL,
+              discount_cents INTEGER NOT NULL DEFAULT 0,
+              discount_percent DOUBLE PRECISION,
               line_total INTEGER NOT NULL
             )
             """,
@@ -309,6 +313,10 @@ class PostgresRepository:
             cur.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS voice_transcriptions_this_month INTEGER NOT NULL DEFAULT 0")
             cur.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS paid_voice_credits INTEGER NOT NULL DEFAULT 0")
             cur.execute("ALTER TABLE profiles ADD COLUMN IF NOT EXISTS address TEXT")
+            cur.execute("ALTER TABLE invoice_draft_items ADD COLUMN IF NOT EXISTS discount_cents INTEGER NOT NULL DEFAULT 0")
+            cur.execute("ALTER TABLE invoice_draft_items ADD COLUMN IF NOT EXISTS discount_percent DOUBLE PRECISION")
+            cur.execute("ALTER TABLE invoice_items ADD COLUMN IF NOT EXISTS discount_cents INTEGER NOT NULL DEFAULT 0")
+            cur.execute("ALTER TABLE invoice_items ADD COLUMN IF NOT EXISTS discount_percent DOUBLE PRECISION")
             conn.commit()
 
     def _ensure_user(self, user_id: str) -> dict:
@@ -374,7 +382,7 @@ class PostgresRepository:
     def _load_draft_items(self, cur: Any, draft_id: str) -> list[InvoiceItem]:
         cur.execute(
             """
-            SELECT description, quantity, unit_price
+            SELECT description, quantity, unit_price, discount_cents, discount_percent
             FROM invoice_draft_items
             WHERE draft_id = %s
             ORDER BY created_at ASC
@@ -386,6 +394,8 @@ class PostgresRepository:
                 description=row["description"],
                 quantity=float(row["quantity"]),
                 unit_price_cents=int(row["unit_price"]),
+                discount_cents=int(row.get("discount_cents") or 0),
+                discount_percent=float(row["discount_percent"]) if row.get("discount_percent") is not None else None,
             )
             for row in cur.fetchall()
         ]
@@ -560,8 +570,10 @@ class PostgresRepository:
             for item in draft.items:
                 cur.execute(
                     """
-                    INSERT INTO invoice_draft_items (id, draft_id, description, quantity, unit_price, line_total)
-                    VALUES (%s, %s, %s, %s, %s, %s)
+                    INSERT INTO invoice_draft_items (
+                        id, draft_id, description, quantity, unit_price, discount_cents, discount_percent, line_total
+                    )
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
                     """,
                     (
                         str(uuid4()),
@@ -569,6 +581,8 @@ class PostgresRepository:
                         item.description,
                         item.quantity,
                         item.unit_price_cents,
+                        item.discount_cents,
+                        item.discount_percent,
                         item.line_total_cents,
                     ),
                 )
@@ -629,8 +643,10 @@ class PostgresRepository:
             for item in items:
                 cur.execute(
                     """
-                    INSERT INTO invoice_items (id, invoice_id, description, quantity, unit_price, line_total)
-                    VALUES (%s, %s, %s, %s, %s, %s)
+                    INSERT INTO invoice_items (
+                        id, invoice_id, description, quantity, unit_price, discount_cents, discount_percent, line_total
+                    )
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
                     """,
                     (
                         str(uuid4()),
@@ -638,6 +654,8 @@ class PostgresRepository:
                         item.description,
                         item.quantity,
                         item.unit_price_cents,
+                        item.discount_cents,
+                        item.discount_percent,
                         item.line_total_cents,
                     ),
                 )
@@ -750,7 +768,7 @@ class PostgresRepository:
             for invoice in invoices:
                 cur.execute(
                     """
-                    SELECT description, quantity, unit_price
+                    SELECT description, quantity, unit_price, discount_cents, discount_percent
                     FROM invoice_items
                     WHERE invoice_id = %s
                     ORDER BY id ASC
@@ -762,6 +780,8 @@ class PostgresRepository:
                         description=row["description"],
                         quantity=float(row["quantity"]),
                         unit_price_cents=int(row["unit_price"]),
+                        discount_cents=int(row.get("discount_cents") or 0),
+                        discount_percent=float(row["discount_percent"]) if row.get("discount_percent") is not None else None,
                     )
                     for row in cur.fetchall()
                 ]

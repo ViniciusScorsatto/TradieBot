@@ -14,6 +14,14 @@ def subtotal_cents(draft: InvoiceDraft) -> int:
     return sum(item.line_total_cents for item in draft.items)
 
 
+def gross_subtotal_cents(draft: InvoiceDraft) -> int:
+    return sum(item.gross_total_cents for item in draft.items)
+
+
+def discount_total_cents(draft: InvoiceDraft) -> int:
+    return sum(item.discount_cents for item in draft.items)
+
+
 def gst_cents(draft: InvoiceDraft, profile: Profile) -> int:
     if not is_gst_registered(profile):
         return 0

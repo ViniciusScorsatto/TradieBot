@@ -19,10 +19,16 @@ class InvoiceItem:
     description: str
     quantity: float
     unit_price_cents: int
+    discount_cents: int = 0
+    discount_percent: float | None = None
+
+    @property
+    def gross_total_cents(self) -> int:
+        return int(round(self.quantity * self.unit_price_cents))
 
     @property
     def line_total_cents(self) -> int:
-        return int(round(self.quantity * self.unit_price_cents))
+        return max(0, self.gross_total_cents - self.discount_cents)
 
 
 @dataclass(slots=True)
