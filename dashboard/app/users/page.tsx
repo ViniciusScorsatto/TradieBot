@@ -153,7 +153,7 @@ export default async function UsersPage({
       ) : null}
 
       <section className="panel">
-        <h3>Tradie roster</h3>
+        <h3>Customer roster</h3>
         <table className="table">
           <thead>
             <tr>

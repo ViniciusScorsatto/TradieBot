@@ -7,7 +7,7 @@ export default function DashboardHome() {
         <h2>Run the bot, billing, and support from one place.</h2>
         <p>
           This dashboard is the operational nerve center for InvoiceBot. It tracks the
-          tradies currently using the Telegram bot, how close they are to the free limit,
+          businesses currently using the Telegram bot, how close they are to the free limit,
           what template they chose, what they have paid, how voice usage should be controlled,
           and who needs support.
         </p>
@@ -54,7 +54,7 @@ export default function DashboardHome() {
         </article>
         <article className="panel">
           <h3>Recent ticket pressure</h3>
-          <p>Bug and claim tickets should bubble to the top so no tradie gets stuck waiting.</p>
+          <p>Bug and claim tickets should bubble to the top so no business gets stuck waiting.</p>
           <table className="table">
             <thead>
               <tr>
