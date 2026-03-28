@@ -47,6 +47,10 @@ def _voice_limit_keyboard(settings) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(rows)
 
 
+def _skip_keyboard(step: str, *, label: str = "Skip") -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup([[InlineKeyboardButton(label, callback_data=f"skip_step:{step}")]])
+
+
 def _item_line(item, index: int) -> str:
     return f"{index + 1}. {item.description}: {item.quantity:g} x ${item.unit_price_cents / 100:.2f}"
 
@@ -71,6 +75,14 @@ def _clients_keyboard(clients) -> InlineKeyboardMarkup:
                 InlineKeyboardButton(f"Delete {client.name}", callback_data=f"client_delete:{client.id}"),
             ]
         )
+    return InlineKeyboardMarkup(rows)
+
+
+def _invoice_client_keyboard(clients) -> InlineKeyboardMarkup:
+    rows: list[list[InlineKeyboardButton]] = []
+    for index, client in enumerate(clients[:10]):
+        rows.append([InlineKeyboardButton(f"{index + 1}. {client.name}", callback_data=f"pick_client:{client.id}")])
+    rows.append([InlineKeyboardButton("Skip client", callback_data="skip_step:invoice_client_select")])
     return InlineKeyboardMarkup(rows)
 
 
@@ -131,6 +143,19 @@ async def _send_draft_editor(message: Message | None, draft) -> None:
 
 def _invoice_limit_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup([[InlineKeyboardButton("Unlock 20 more invoices", callback_data="buy_invoice_credits")]])
+
+
+async def _send_invoice_items_prompt(message: Message | None, prefix: str | None = None) -> None:
+    if not message:
+        return
+    lead = f"{prefix}\n\n" if prefix else ""
+    await message.reply_text(
+        lead
+        + "Now send line items like:\n"
+        + "`Labour x 2 at $95`\n`Materials $45`\n\n"
+        + "You can send multiple lines at once, then use /generate.",
+        parse_mode="Markdown",
+    )
 
 
 def _checkout_return_urls(settings, purchase_type: str) -> tuple[str, str]:
@@ -221,19 +246,14 @@ async def invoice_command(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             for index, client in enumerate(clients[:10])
         )
         await update.message.reply_text(
-            "Invoice draft started. Choose a saved client by number, or type `skip` to continue without one.\n\n"
+            "Invoice draft started. Choose a saved client by number, or skip this for now.\n\n"
             f"{client_lines}",
             parse_mode="Markdown",
+            reply_markup=_invoice_client_keyboard(clients),
         )
     else:
         context.user_data["mode"] = "invoice_items"
-        await update.message.reply_text(
-            "Invoice draft started. No saved clients found, so we’ll start with line items.\n\n"
-            "Send line items like:\n"
-            "`Labour x 2 at $95`\n`Materials $45`\n\n"
-            "You can send multiple lines at once, then use /generate.",
-            parse_mode="Markdown",
-        )
+        await _send_invoice_items_prompt(update.message, "Invoice draft started. No saved clients found.")
     if not draft.items:
         return
 
@@ -284,20 +304,22 @@ async def profile_command(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     profile = repo.get_or_create_profile(_user_key(update))
     context.user_data["mode"] = "profile_company_name"
     company_prompt = "Send your company name."
+    keyboard = None
     if profile.company_name:
-        company_prompt = "Send your company name, or type `skip` to keep it."
+        company_prompt = "Send your company name, or keep the current one."
+        keyboard = _skip_keyboard("profile_company_name", label="Keep current")
     await update.message.reply_text(
         "Let’s set up your business profile.\n"
         f"Current company name: {profile.company_name or 'not set'}\n"
         f"{company_prompt}",
-        parse_mode="Markdown",
+        reply_markup=keyboard,
     )
 
 
 def _profile_step_prompt(profile, field: str, label: str, next_text: str) -> str:
     current_value = getattr(profile, field)
     if current_value:
-        return f"Saved. Current {label}: {current_value}\n{next_text}, or type `skip` to keep it."
+        return f"Saved. Current {label}: {current_value}\n{next_text}, or keep the current one."
     return f"Saved. {next_text}."
 
 
@@ -417,12 +439,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         draft = repo.get_draft(user_id) or repo.create_draft(user_id)
         if text.lower() == "skip":
             context.user_data["mode"] = "invoice_items"
-            await update.message.reply_text(
-                "No client selected. Now send line items like:\n"
-                "`Labour x 2 at $95`\n`Materials $45`\n\n"
-                "You can send multiple lines at once, then use /generate.",
-                parse_mode="Markdown",
-            )
+            await _send_invoice_items_prompt(update.message, "No client selected.")
             return
 
         client_options = context.user_data.get("client_options", {})
@@ -439,13 +456,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         draft.client_id = client.id
         repo.save_draft(draft)
         context.user_data["mode"] = "invoice_items"
-        await update.message.reply_text(
-            f"Selected client: {client.name}.\n\n"
-            "Now send line items like:\n"
-            "`Labour x 2 at $95`\n`Materials $45`\n\n"
-            "You can send multiple lines at once, then use /generate.",
-            parse_mode="Markdown",
-        )
+        await _send_invoice_items_prompt(update.message, f"Selected client: {client.name}.")
         return
 
     if mode == "profile_company_name":
@@ -457,6 +468,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         await update.message.reply_text(
             _profile_step_prompt(profile, "address", "business address", "Now send your business address"),
             parse_mode="Markdown",
+            reply_markup=_skip_keyboard("profile_address", label="Keep current") if profile.address else None,
         )
         return
 
@@ -469,6 +481,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         await update.message.reply_text(
             _profile_step_prompt(profile, "email", "email", "Now send your business email"),
             parse_mode="Markdown",
+            reply_markup=_skip_keyboard("profile_email", label="Keep current") if profile.email else None,
         )
         return
 
@@ -481,6 +494,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         await update.message.reply_text(
             _profile_step_prompt(profile, "phone", "phone", "Now send your business phone"),
             parse_mode="Markdown",
+            reply_markup=_skip_keyboard("profile_phone", label="Keep current") if profile.phone else None,
         )
         return
 
@@ -493,6 +507,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         await update.message.reply_text(
             _profile_step_prompt(profile, "gst_number", "GST number", "Now send your GST number"),
             parse_mode="Markdown",
+            reply_markup=_skip_keyboard("profile_gst_number", label="Keep current") if profile.gst_number else None,
         )
         return
 
@@ -521,25 +536,25 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     if mode == "client_name":
         context.user_data["new_client_name"] = text
         context.user_data["mode"] = "client_company"
-        await update.message.reply_text("Send the client company, or type `skip`.")
+        await update.message.reply_text("Send the client company.", reply_markup=_skip_keyboard("client_company"))
         return
 
     if mode == "client_company":
         context.user_data["new_client_company"] = "" if text.lower() == "skip" else text
         context.user_data["mode"] = "client_email"
-        await update.message.reply_text("Send the client email, or type `skip`.")
+        await update.message.reply_text("Send the client email.", reply_markup=_skip_keyboard("client_email"))
         return
 
     if mode == "client_email":
         context.user_data["new_client_email"] = "" if text.lower() == "skip" else text
         context.user_data["mode"] = "client_phone"
-        await update.message.reply_text("Send the client phone, or type `skip`.")
+        await update.message.reply_text("Send the client phone.", reply_markup=_skip_keyboard("client_phone"))
         return
 
     if mode == "client_phone":
         context.user_data["new_client_phone"] = "" if text.lower() == "skip" else text
         context.user_data["mode"] = "client_address"
-        await update.message.reply_text("Send the client address, or type `skip`.")
+        await update.message.reply_text("Send the client address.", reply_markup=_skip_keyboard("client_address"))
         return
 
     if mode == "client_address":
@@ -703,6 +718,104 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         clients = repo.list_clients(user_id)
         await query.edit_message_text("Client edit finished.")
         await _send_clients_list(query.message, clients)
+        return
+
+    if query.data.startswith("skip_step:"):
+        step = query.data.split(":", 1)[1]
+        if step == "invoice_client_select":
+            context.user_data["mode"] = "invoice_items"
+            await query.edit_message_text("No client selected.")
+            await _send_invoice_items_prompt(query.message)
+            return
+        if step == "profile_company_name":
+            context.user_data["mode"] = "profile_address"
+            profile = repo.get_or_create_profile(user_id)
+            await query.edit_message_text("Keeping current company name.")
+            await query.message.reply_text(
+                _profile_step_prompt(profile, "address", "business address", "Now send your business address"),
+                parse_mode="Markdown",
+                reply_markup=_skip_keyboard("profile_address", label="Keep current") if profile.address else None,
+            )
+            return
+        if step == "profile_address":
+            context.user_data["mode"] = "profile_email"
+            profile = repo.get_or_create_profile(user_id)
+            await query.edit_message_text("Keeping current address.")
+            await query.message.reply_text(
+                _profile_step_prompt(profile, "email", "email", "Now send your business email"),
+                parse_mode="Markdown",
+                reply_markup=_skip_keyboard("profile_email", label="Keep current") if profile.email else None,
+            )
+            return
+        if step == "profile_email":
+            context.user_data["mode"] = "profile_phone"
+            profile = repo.get_or_create_profile(user_id)
+            await query.edit_message_text("Keeping current email.")
+            await query.message.reply_text(
+                _profile_step_prompt(profile, "phone", "phone", "Now send your business phone"),
+                parse_mode="Markdown",
+                reply_markup=_skip_keyboard("profile_phone", label="Keep current") if profile.phone else None,
+            )
+            return
+        if step == "profile_phone":
+            context.user_data["mode"] = "profile_gst_number"
+            profile = repo.get_or_create_profile(user_id)
+            await query.edit_message_text("Keeping current phone.")
+            await query.message.reply_text(
+                _profile_step_prompt(profile, "gst_number", "GST number", "Now send your GST number"),
+                parse_mode="Markdown",
+                reply_markup=_skip_keyboard("profile_gst_number", label="Keep current") if profile.gst_number else None,
+            )
+            return
+        if step == "profile_gst_number":
+            context.user_data["mode"] = None
+            await query.edit_message_text("Keeping current GST number.")
+            await query.message.reply_text("Profile saved. Use /template to pick your default invoice layout.")
+            return
+        if step == "client_company":
+            context.user_data["new_client_company"] = ""
+            context.user_data["mode"] = "client_email"
+            await query.edit_message_text("Skipping client company.")
+            await query.message.reply_text("Send the client email.", reply_markup=_skip_keyboard("client_email"))
+            return
+        if step == "client_email":
+            context.user_data["new_client_email"] = ""
+            context.user_data["mode"] = "client_phone"
+            await query.edit_message_text("Skipping client email.")
+            await query.message.reply_text("Send the client phone.", reply_markup=_skip_keyboard("client_phone"))
+            return
+        if step == "client_phone":
+            context.user_data["new_client_phone"] = ""
+            context.user_data["mode"] = "client_address"
+            await query.edit_message_text("Skipping client phone.")
+            await query.message.reply_text("Send the client address.", reply_markup=_skip_keyboard("client_address"))
+            return
+        if step == "client_address":
+            client = repo.add_client(
+                user_id,
+                name=context.user_data.pop("new_client_name", ""),
+                company=context.user_data.pop("new_client_company", ""),
+                email=context.user_data.pop("new_client_email", ""),
+                phone=context.user_data.pop("new_client_phone", ""),
+                address="",
+            )
+            context.user_data["mode"] = None
+            await query.edit_message_text("Skipping client address.")
+            await query.message.reply_text(f"Saved client {_client_summary(client)}.")
+            return
+
+    if query.data.startswith("pick_client:"):
+        client_id = query.data.split(":", 1)[1]
+        draft = repo.get_draft(user_id) or repo.create_draft(user_id)
+        client = repo.get_client(user_id, client_id)
+        if not client:
+            await query.edit_message_text("That client is no longer available. Choose another client or skip.")
+            return
+        draft.client_id = client.id
+        repo.save_draft(draft)
+        context.user_data["mode"] = "invoice_items"
+        await query.edit_message_text(f"Selected client: {client.name}.")
+        await _send_invoice_items_prompt(query.message)
         return
 
     if query.data.startswith("client_edit:"):
