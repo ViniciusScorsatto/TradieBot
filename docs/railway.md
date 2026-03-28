@@ -71,7 +71,8 @@ Set these at the project level if multiple services need them:
 - `TELEGRAM_BOT_URL`
 - `NEXT_PUBLIC_TELEGRAM_BOT_URL`
 - `OPENAI_API_KEY`
-- `RESEND_API_KEY`
+- `MAILJET_API_KEY`
+- `MAILJET_SECRET_KEY`
 - `EMAIL_FROM`
 - `STRIPE_SECRET_KEY`
 - `STRIPE_WEBHOOK_SECRET`
@@ -98,7 +99,8 @@ Set these at the project level if multiple services need them:
 
 - `TELEGRAM_TOKEN`
 - `OPENAI_API_KEY`
-- `RESEND_API_KEY`
+- `MAILJET_API_KEY`
+- `MAILJET_SECRET_KEY`
 - `EMAIL_FROM`
 - `STRIPE_SECRET_KEY`
 - `STRIPE_INVOICE_PRICE_ID`

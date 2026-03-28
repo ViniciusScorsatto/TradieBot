@@ -1624,7 +1624,8 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         loading_message = await _send_temporary_status(query.message, "Sending invoice email...")
         try:
             await send_invoice_email(
-                resend_api_key=settings.resend_api_key,
+                mailjet_api_key=settings.mailjet_api_key,
+                mailjet_secret_key=settings.mailjet_secret_key,
                 email_from=settings.email_from,
                 to_email=last_invoice["client_email"],
                 subject=f"Invoice {last_invoice['invoice_number']}",

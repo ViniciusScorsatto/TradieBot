@@ -9,7 +9,8 @@ class Settings:
     telegram_token: str
     database_url: str
     openai_api_key: str
-    resend_api_key: str
+    mailjet_api_key: str
+    mailjet_secret_key: str
     email_from: str
     stripe_secret_key: str
     stripe_invoice_price_id: str
@@ -31,7 +32,8 @@ class Settings:
             telegram_token=os.getenv("TELEGRAM_TOKEN", ""),
             database_url=os.getenv("DATABASE_URL", ""),
             openai_api_key=os.getenv("OPENAI_API_KEY", ""),
-            resend_api_key=os.getenv("RESEND_API_KEY", ""),
+            mailjet_api_key=os.getenv("MAILJET_API_KEY", ""),
+            mailjet_secret_key=os.getenv("MAILJET_SECRET_KEY", ""),
             email_from=os.getenv("EMAIL_FROM", ""),
             stripe_secret_key=os.getenv("STRIPE_SECRET_KEY", ""),
             stripe_invoice_price_id=os.getenv("STRIPE_INVOICE_PRICE_ID", ""),
