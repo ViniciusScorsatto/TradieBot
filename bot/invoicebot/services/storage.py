@@ -184,6 +184,7 @@ class PostgresRepository:
               id TEXT PRIMARY KEY,
               user_id TEXT UNIQUE NOT NULL REFERENCES users(id) ON DELETE CASCADE,
               company_name TEXT,
+              address TEXT,
               gst_number TEXT,
               email TEXT,
               phone TEXT,
@@ -300,6 +301,7 @@ class PostgresRepository:
                 cur.execute(statement)
             cur.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS voice_transcriptions_this_month INTEGER NOT NULL DEFAULT 0")
             cur.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS paid_voice_credits INTEGER NOT NULL DEFAULT 0")
+            cur.execute("ALTER TABLE profiles ADD COLUMN IF NOT EXISTS address TEXT")
             conn.commit()
 
     def _ensure_user(self, user_id: str) -> dict:
@@ -329,6 +331,7 @@ class PostgresRepository:
             return Profile()
         return Profile(
             company_name=row.get("company_name") or "",
+            address=row.get("address") or "",
             gst_number=row.get("gst_number") or "",
             email=row.get("email") or "",
             phone=row.get("phone") or "",
@@ -410,6 +413,7 @@ class PostgresRepository:
                     """
                     UPDATE profiles
                     SET company_name = %s,
+                        address = %s,
                         gst_number = %s,
                         email = %s,
                         phone = %s,
@@ -423,6 +427,7 @@ class PostgresRepository:
                     """,
                     (
                         profile.company_name,
+                        profile.address,
                         profile.gst_number,
                         profile.email,
                         profile.phone,
@@ -438,15 +443,16 @@ class PostgresRepository:
                 cur.execute(
                     """
                     INSERT INTO profiles (
-                        id, user_id, company_name, gst_number, email, phone,
+                        id, user_id, company_name, address, gst_number, email, phone,
                         bank_details, logo_url, default_template_id, invoice_prefix, next_invoice_number
                     )
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                     """,
                     (
                         str(uuid4()),
                         user["id"],
                         profile.company_name,
+                        profile.address,
                         profile.gst_number,
                         profile.email,
                         profile.phone,
@@ -590,6 +596,7 @@ class PostgresRepository:
                     json.dumps(
                         {
                             "company_name": profile.company_name,
+                            "address": profile.address,
                             "gst_number": profile.gst_number,
                             "email": profile.email,
                             "phone": profile.phone,

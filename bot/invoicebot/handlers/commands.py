@@ -294,6 +294,13 @@ async def profile_command(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     )
 
 
+def _profile_step_prompt(profile, field: str, label: str, next_text: str) -> str:
+    current_value = getattr(profile, field)
+    if current_value:
+        return f"Saved. Current {label}: {current_value}\n{next_text}, or type `skip` to keep it."
+    return f"Saved. {next_text}."
+
+
 async def template_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     options = "\n".join(f"{index + 1}. {template.name} - {template.description}" for index, template in enumerate(TEMPLATES))
     context.user_data["mode"] = "template_select"
@@ -446,13 +453,47 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         if text.lower() != "skip" or not profile.company_name:
             profile.company_name = text
         repo.save_profile(user_id, profile)
-        context.user_data["mode"] = "profile_gst_number"
-        gst_prompt = (
-            "Saved. Now send your GST number."
-            if not profile.gst_number
-            else f"Saved. Current GST number: {profile.gst_number}\nSend your GST number, or type `skip` to keep it."
+        context.user_data["mode"] = "profile_address"
+        await update.message.reply_text(
+            _profile_step_prompt(profile, "address", "business address", "Now send your business address"),
+            parse_mode="Markdown",
         )
-        await update.message.reply_text(gst_prompt, parse_mode="Markdown")
+        return
+
+    if mode == "profile_address":
+        profile = repo.get_or_create_profile(user_id)
+        if text.lower() != "skip" or not profile.address:
+            profile.address = text
+        repo.save_profile(user_id, profile)
+        context.user_data["mode"] = "profile_email"
+        await update.message.reply_text(
+            _profile_step_prompt(profile, "email", "email", "Now send your business email"),
+            parse_mode="Markdown",
+        )
+        return
+
+    if mode == "profile_email":
+        profile = repo.get_or_create_profile(user_id)
+        if text.lower() != "skip" or not profile.email:
+            profile.email = text
+        repo.save_profile(user_id, profile)
+        context.user_data["mode"] = "profile_phone"
+        await update.message.reply_text(
+            _profile_step_prompt(profile, "phone", "phone", "Now send your business phone"),
+            parse_mode="Markdown",
+        )
+        return
+
+    if mode == "profile_phone":
+        profile = repo.get_or_create_profile(user_id)
+        if text.lower() != "skip" or not profile.phone:
+            profile.phone = text
+        repo.save_profile(user_id, profile)
+        context.user_data["mode"] = "profile_gst_number"
+        await update.message.reply_text(
+            _profile_step_prompt(profile, "gst_number", "GST number", "Now send your GST number"),
+            parse_mode="Markdown",
+        )
         return
 
     if mode == "profile_gst_number":
@@ -478,9 +519,40 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         return
 
     if mode == "client_name":
-        client = repo.add_client(user_id, name=text)
+        context.user_data["new_client_name"] = text
+        context.user_data["mode"] = "client_company"
+        await update.message.reply_text("Send the client company, or type `skip`.")
+        return
+
+    if mode == "client_company":
+        context.user_data["new_client_company"] = "" if text.lower() == "skip" else text
+        context.user_data["mode"] = "client_email"
+        await update.message.reply_text("Send the client email, or type `skip`.")
+        return
+
+    if mode == "client_email":
+        context.user_data["new_client_email"] = "" if text.lower() == "skip" else text
+        context.user_data["mode"] = "client_phone"
+        await update.message.reply_text("Send the client phone, or type `skip`.")
+        return
+
+    if mode == "client_phone":
+        context.user_data["new_client_phone"] = "" if text.lower() == "skip" else text
+        context.user_data["mode"] = "client_address"
+        await update.message.reply_text("Send the client address, or type `skip`.")
+        return
+
+    if mode == "client_address":
+        client = repo.add_client(
+            user_id,
+            name=context.user_data.pop("new_client_name", text),
+            company=context.user_data.pop("new_client_company", ""),
+            email=context.user_data.pop("new_client_email", ""),
+            phone=context.user_data.pop("new_client_phone", ""),
+            address="" if text.lower() == "skip" else text,
+        )
         context.user_data["mode"] = None
-        await update.message.reply_text(f"Saved client {client.name}.")
+        await update.message.reply_text(f"Saved client {_client_summary(client)}.")
         return
 
     if mode == "edit_client_field":

@@ -28,6 +28,7 @@ class InvoiceItem:
 @dataclass(slots=True)
 class Profile:
     company_name: str = ""
+    address: str = ""
     gst_number: str = ""
     email: str = ""
     phone: str = ""
