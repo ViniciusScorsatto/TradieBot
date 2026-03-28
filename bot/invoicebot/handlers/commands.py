@@ -47,6 +47,35 @@ def _voice_limit_keyboard(settings) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(rows)
 
 
+def _item_line(item, index: int) -> str:
+    return f"{index + 1}. {item.description}: {item.quantity:g} x ${item.unit_price_cents / 100:.2f}"
+
+
+def _draft_editor_keyboard(draft) -> InlineKeyboardMarkup:
+    rows: list[list[InlineKeyboardButton]] = []
+    for index, item in enumerate(draft.items):
+        rows.append(
+            [
+                InlineKeyboardButton(f"Edit {index + 1}", callback_data=f"edit_item:{index}"),
+                InlineKeyboardButton(f"Delete {index + 1}", callback_data=f"delete_item:{index}"),
+            ]
+        )
+    return InlineKeyboardMarkup(rows)
+
+
+async def _send_draft_editor(message: Message | None, draft) -> None:
+    if not message:
+        return
+    if not draft or not draft.items:
+        await message.reply_text("There are no items in this draft yet.")
+        return
+    lines = "\n".join(_item_line(item, index) for index, item in enumerate(draft.items))
+    await message.reply_text(
+        "Choose an item to edit or delete:\n\n" + lines,
+        reply_markup=_draft_editor_keyboard(draft),
+    )
+
+
 def _invoice_limit_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup([[InlineKeyboardButton("Unlock 20 more invoices", callback_data="buy_invoice_credits")]])
 
@@ -280,11 +309,51 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     if mode == "invoice_items":
         draft = repo.get_draft(user_id) or repo.create_draft(user_id)
         try:
-            draft.items.extend(parse_line_items(text))
+            new_items = parse_line_items(text)
+            start_index = len(draft.items)
+            draft.items.extend(new_items)
             repo.save_draft(draft)
-            await update.message.reply_text(f"Added {len(draft.items)} item(s) so far. Use /generate when ready.")
+            lines = "\n".join(
+                _item_line(item, start_index + offset) for offset, item in enumerate(new_items)
+            )
+            await update.message.reply_text(
+                f"Added {len(new_items)} item(s).\n\n{lines}\n\nYou now have {len(draft.items)} item(s) in this draft.",
+                reply_markup=_draft_editor_keyboard(draft),
+            )
         except ValueError as exc:
             await update.message.reply_text(str(exc))
+        return
+
+    if mode == "edit_draft_item":
+        draft = repo.get_draft(user_id)
+        item_index = context.user_data.get("edit_item_index")
+        if draft is None or item_index is None or not (0 <= item_index < len(draft.items)):
+            context.user_data["mode"] = "invoice_items"
+            context.user_data.pop("edit_item_index", None)
+            await update.message.reply_text("That draft item is no longer available. Use /invoice to continue.")
+            return
+        try:
+            replacement_items = parse_line_items(text)
+        except ValueError as exc:
+            await update.message.reply_text(
+                f"{exc}\n\nSend one replacement line item like:\n`Materials $45`",
+                parse_mode="Markdown",
+            )
+            return
+        if len(replacement_items) != 1:
+            await update.message.reply_text(
+                "Please send exactly one replacement line item, for example:\n`Labour x 2 at $95`",
+                parse_mode="Markdown",
+            )
+            return
+        draft.items[item_index] = replacement_items[0]
+        repo.save_draft(draft)
+        context.user_data["mode"] = "invoice_items"
+        context.user_data.pop("edit_item_index", None)
+        await update.message.reply_text(
+            f"Updated item {item_index + 1}.\n\n{_item_line(replacement_items[0], item_index)}",
+            reply_markup=_draft_editor_keyboard(draft),
+        )
         return
 
     if mode == "invoice_client_select":
@@ -445,14 +514,21 @@ async def _handle_voice_message(update: Update, context: ContextTypes.DEFAULT_TY
 
     draft = repo.get_draft(user_id) or repo.create_draft(user_id)
     try:
-        draft.items.extend(parse_line_items(transcript))
+        new_items = parse_line_items(transcript)
+        start_index = len(draft.items)
+        draft.items.extend(new_items)
         repo.save_draft(draft)
         repo.increment_voice_usage(user_id)
         repo.consume_paid_voice_credit_if_needed(user_id, settings.free_voice_transcriptions_per_month)
+        lines = "\n".join(
+            _item_line(item, start_index + offset) for offset, item in enumerate(new_items)
+        )
         await message.reply_text(
             "Voice note transcribed and added.\n\n"
             f"Transcript:\n{transcript}\n\n"
-            f"You now have {len(draft.items)} item(s) in this draft."
+            f"{lines}\n\n"
+            f"You now have {len(draft.items)} item(s) in this draft.",
+            reply_markup=_draft_editor_keyboard(draft),
         )
     except ValueError:
         await message.reply_text(
@@ -474,7 +550,41 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     user_id = _user_key(update)
 
     if query.data == "edit_draft":
-        await query.edit_message_text("Draft still open. Send more line items and run /generate again.")
+        draft = repo.get_draft(user_id)
+        await query.edit_message_text("Draft still open. Use the controls below or send more line items.")
+        await _send_draft_editor(query.message, draft)
+        return
+
+    if query.data.startswith("edit_item:"):
+        draft = repo.get_draft(user_id)
+        item_index = int(query.data.split(":", 1)[1])
+        if not draft or not (0 <= item_index < len(draft.items)):
+            await query.edit_message_text("That item is no longer available. Use /invoice to continue.")
+            return
+        context.user_data["mode"] = "edit_draft_item"
+        context.user_data["edit_item_index"] = item_index
+        await query.edit_message_text(
+            f"Send the replacement text for item {item_index + 1}:\n\n{_item_line(draft.items[item_index], item_index)}"
+        )
+        return
+
+    if query.data.startswith("delete_item:"):
+        draft = repo.get_draft(user_id)
+        item_index = int(query.data.split(":", 1)[1])
+        if not draft or not (0 <= item_index < len(draft.items)):
+            await query.edit_message_text("That item is no longer available. Use /invoice to continue.")
+            return
+        removed_item = draft.items.pop(item_index)
+        repo.save_draft(draft)
+        if not draft.items:
+            await query.edit_message_text(
+                f"Deleted item {item_index + 1}: {removed_item.description}. The draft is now empty, so send a new line item."
+            )
+            return
+        await query.edit_message_text(
+            f"Deleted item {item_index + 1}: {removed_item.description}."
+        )
+        await _send_draft_editor(query.message, draft)
         return
 
     if query.data == "voice_continue_text":
