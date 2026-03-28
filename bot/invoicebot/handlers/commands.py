@@ -4,7 +4,7 @@ from dataclasses import replace
 from tempfile import NamedTemporaryFile
 import traceback
 
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Message, Update
 from telegram.ext import ContextTypes
 
 from invoicebot.models import SupportTicket
@@ -24,6 +24,21 @@ def _user_key(update: Update) -> str:
 
 def _repo(context: ContextTypes.DEFAULT_TYPE) -> Repository:
     return context.application.bot_data["repo"]
+
+
+async def _send_temporary_status(message: Message | None, text: str) -> Message | None:
+    if not message:
+        return None
+    return await message.reply_text(text)
+
+
+async def _clear_temporary_status(message: Message | None) -> None:
+    if not message:
+        return
+    try:
+        await message.delete()
+    except Exception:
+        pass
 
 
 def _voice_limit_keyboard(settings) -> InlineKeyboardMarkup:
@@ -417,13 +432,16 @@ async def _handle_voice_message(update: Update, context: ContextTypes.DEFAULT_TY
         return
 
     telegram_file = await context.bot.get_file(voice.file_id)
+    loading_message = await _send_temporary_status(message, "Transcribing voice note...")
     with NamedTemporaryFile(suffix=".ogg", delete=True) as temp_file:
-        await telegram_file.download_to_drive(custom_path=temp_file.name)
         try:
+            await telegram_file.download_to_drive(custom_path=temp_file.name)
             transcript = await transcribe_audio_file(temp_file.name, settings.openai_api_key)
         except Exception:
             await message.reply_text("I couldn't transcribe that voice note. Please try again or type the items manually.")
             return
+        finally:
+            await _clear_temporary_status(loading_message)
 
     draft = repo.get_draft(user_id) or repo.create_draft(user_id)
     try:
@@ -511,8 +529,12 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             return
         profile = repo.get_or_create_profile(user_id)
         client = repo.get_client(user_id, draft.client_id) if draft.client_id else None
-        pdf_bytes = render_invoice_pdf(profile, draft, client)
-        repo.finalize_draft(user_id)
-        repo.consume_paid_credit_if_needed(user_id, context.application.bot_data["settings"].free_invoice_limit)
-        await query.edit_message_text("Invoice generated and sent below.")
-        await query.message.reply_document(document=pdf_bytes, filename="invoice.pdf")
+        loading_message = await _send_temporary_status(query.message, "Generating invoice PDF...")
+        try:
+            pdf_bytes = render_invoice_pdf(profile, draft, client)
+            repo.finalize_draft(user_id)
+            repo.consume_paid_credit_if_needed(user_id, context.application.bot_data["settings"].free_invoice_limit)
+            await query.edit_message_text("Invoice generated and sent below.")
+            await query.message.reply_document(document=pdf_bytes, filename="invoice.pdf")
+        finally:
+            await _clear_temporary_status(loading_message)
