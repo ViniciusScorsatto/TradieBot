@@ -190,45 +190,53 @@ export default async function UsersPage({
                   <td>{template?.name ?? user.templateId}</td>
                   <td>{user.stripeCustomerId ?? "Not linked"}</td>
                   <td>
-                    <div className="row-actions">
-                      <form action={addVoiceCredits} className="credit-form">
-                        <input type="hidden" name="userId" value={user.id} />
-                        <input type="hidden" name="userName" value={user.name} />
-                        <input
-                          className="credit-input"
-                          type="number"
-                          name="amount"
-                          min={1}
-                          step={1}
-                          defaultValue={paidVoiceBlock}
-                          aria-label={`Voice credits for ${user.name}`}
-                        />
-                        <ActionButton label="Add Voice" />
-                      </form>
-                      <form action={addInvoiceCredits} className="credit-form">
-                        <input type="hidden" name="userId" value={user.id} />
-                        <input type="hidden" name="userName" value={user.name} />
-                        <input
-                          className="credit-input"
-                          type="number"
-                          name="amount"
-                          min={1}
-                          step={1}
-                          defaultValue={paidInvoiceBlock}
-                          aria-label={`Invoice credits for ${user.name}`}
-                        />
-                        <ActionButton label="Add Invoices" />
-                      </form>
-                      <form action={resetVoiceUsage}>
-                        <input type="hidden" name="userId" value={user.id} />
-                        <input type="hidden" name="userName" value={user.name} />
-                        <ActionButton label="Reset Voice" />
-                      </form>
-                      <form action={resetInvoiceCount}>
-                        <input type="hidden" name="userId" value={user.id} />
-                        <input type="hidden" name="userName" value={user.name} />
-                        <ActionButton label="Reset Invoices" />
-                      </form>
+                    <div className="action-stack">
+                      <div className="action-group">
+                        <span className="action-label">Add free credit</span>
+                        <form action={addVoiceCredits} className="credit-form">
+                          <input type="hidden" name="userId" value={user.id} />
+                          <input type="hidden" name="userName" value={user.name} />
+                          <input
+                            className="credit-input"
+                            type="number"
+                            name="amount"
+                            min={1}
+                            step={1}
+                            defaultValue={paidVoiceBlock}
+                            aria-label={`Voice credits for ${user.name}`}
+                          />
+                          <ActionButton label="Add Voice" />
+                        </form>
+                        <form action={addInvoiceCredits} className="credit-form">
+                          <input type="hidden" name="userId" value={user.id} />
+                          <input type="hidden" name="userName" value={user.name} />
+                          <input
+                            className="credit-input"
+                            type="number"
+                            name="amount"
+                            min={1}
+                            step={1}
+                            defaultValue={paidInvoiceBlock}
+                            aria-label={`Invoice credits for ${user.name}`}
+                          />
+                          <ActionButton label="Add Invoices" />
+                        </form>
+                      </div>
+                      <div className="action-group">
+                        <span className="action-label">Reset usage</span>
+                        <div className="row-actions">
+                          <form action={resetVoiceUsage}>
+                            <input type="hidden" name="userId" value={user.id} />
+                            <input type="hidden" name="userName" value={user.name} />
+                            <ActionButton label="Reset Voice" />
+                          </form>
+                          <form action={resetInvoiceCount}>
+                            <input type="hidden" name="userId" value={user.id} />
+                            <input type="hidden" name="userName" value={user.name} />
+                            <ActionButton label="Reset Invoices" />
+                          </form>
+                        </div>
+                      </div>
                     </div>
                   </td>
                 </tr>

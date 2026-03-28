@@ -243,10 +243,36 @@ a {
   flex-wrap: wrap;
 }
 
+.action-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 280px;
+}
+
+.action-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid rgba(44, 54, 57, 0.1);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.75);
+}
+
+.action-label {
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+}
+
 .credit-form {
   display: inline-flex;
   align-items: center;
   gap: 8px;
+  flex-wrap: nowrap;
 }
 
 .credit-input {
@@ -257,6 +283,7 @@ a {
   background: white;
   color: var(--ink);
   font: inherit;
+  text-align: center;
 }
 
 @media (max-width: 980px) {
