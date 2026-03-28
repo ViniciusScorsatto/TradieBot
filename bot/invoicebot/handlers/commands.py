@@ -199,14 +199,7 @@ def _item_line(item, index: int) -> str:
 
 
 def _client_summary(client) -> str:
-    extras = []
-    if client.company:
-        extras.append(client.company)
-    if client.email:
-        extras.append(client.email)
-    if client.phone:
-        extras.append(client.phone)
-    return f"{client.name}" + (f" ({' • '.join(extras)})" if extras else "")
+    return f"{client.name}" + (f" ({client.company})" if client.company else "")
 
 
 def _client_matches_query(client, query: str) -> bool:
