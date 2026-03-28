@@ -261,9 +261,27 @@ def _clients_keyboard(clients, *, page: int = 0, query: str = "") -> InlineKeybo
 
 
 def _invoice_client_keyboard(clients) -> InlineKeyboardMarkup:
+    return _invoice_client_keyboard_page(clients, page=0, query="")
+
+
+def _invoice_client_keyboard_page(clients, *, page: int = 0, query: str = "") -> InlineKeyboardMarkup:
+    filtered = _filtered_clients(clients, query)
+    total_pages = max(1, (len(filtered) + CLIENTS_PAGE_SIZE - 1) // CLIENTS_PAGE_SIZE)
+    safe_page = max(0, min(page, total_pages - 1))
+    start = safe_page * CLIENTS_PAGE_SIZE
+    visible_clients = filtered[start:start + CLIENTS_PAGE_SIZE]
     rows: list[list[InlineKeyboardButton]] = []
-    for index, client in enumerate(clients[:10]):
-        rows.append([InlineKeyboardButton(f"{index + 1}. {client.name}", callback_data=f"pick_client:{client.id}")])
+    for index, client in enumerate(visible_clients):
+        rows.append([InlineKeyboardButton(f"{start + index + 1}. {client.name}", callback_data=f"pick_client:{client.id}")])
+    navigation: list[InlineKeyboardButton] = []
+    if safe_page > 0:
+        navigation.append(InlineKeyboardButton("Prev", callback_data=f"invoice_clients_page:{safe_page - 1}"))
+    if safe_page < total_pages - 1:
+        navigation.append(InlineKeyboardButton("Next", callback_data=f"invoice_clients_page:{safe_page + 1}"))
+    if navigation:
+        rows.append(navigation)
+    if query:
+        rows.append([InlineKeyboardButton("Clear search", callback_data="invoice_clients_clear_search")])
     rows.append([InlineKeyboardButton("Skip client", callback_data="skip_step:invoice_client_select")])
     return InlineKeyboardMarkup(rows)
 
@@ -314,6 +332,43 @@ async def _send_clients_list(message: Message | None, clients, *, page: int = 0,
         + "\n\nSend at least 3 starting letters to search by client name or company.",
         parse_mode="Markdown",
         reply_markup=_clients_keyboard(clients, page=safe_page, query=query),
+    )
+
+
+async def _send_invoice_client_picker(message: Message | None, clients, *, page: int = 0, query: str = "") -> None:
+    if not message:
+        return
+    if not clients:
+        await _send_invoice_items_prompt(message, "Invoice draft started. No saved clients found.")
+        return
+    filtered = _filtered_clients(clients, query)
+    if not filtered:
+        await message.reply_text(
+            f"No clients match `{query}`.\n\nSend at least 3 starting letters to search by client name or company, or use the button below to clear the search.",
+            parse_mode="Markdown",
+            reply_markup=InlineKeyboardMarkup(
+                [
+                    [InlineKeyboardButton("Clear search", callback_data="invoice_clients_clear_search")],
+                    [InlineKeyboardButton("Skip client", callback_data="skip_step:invoice_client_select")],
+                ]
+            ),
+        )
+        return
+    total_pages = max(1, (len(filtered) + CLIENTS_PAGE_SIZE - 1) // CLIENTS_PAGE_SIZE)
+    safe_page = max(0, min(page, total_pages - 1))
+    start = safe_page * CLIENTS_PAGE_SIZE
+    visible_clients = filtered[start:start + CLIENTS_PAGE_SIZE]
+    lines = "\n".join(f"{start + index + 1}. {_client_summary(client)}" for index, client in enumerate(visible_clients))
+    header = f"Invoice draft started. Choose a saved client (page {safe_page + 1}/{total_pages}), or skip this for now."
+    if query:
+        header += f"\nSearch: `{query}`"
+    await message.reply_text(
+        header
+        + "\n\n"
+        + lines
+        + "\n\nSend at least 3 starting letters to search by client name or company.",
+        parse_mode="Markdown",
+        reply_markup=_invoice_client_keyboard_page(clients, page=safe_page, query=query),
     )
 
 
@@ -472,17 +527,9 @@ async def invoice_command(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     clients = repo.list_clients(user_id)
     if clients:
         context.user_data["mode"] = "invoice_client_select"
-        context.user_data["client_options"] = {str(index + 1): client.id for index, client in enumerate(clients[:10])}
-        client_lines = "\n".join(
-            f"{index + 1}. {client.name} ({client.company or 'no company'})"
-            for index, client in enumerate(clients[:10])
-        )
-        await update.message.reply_text(
-            "Invoice draft started. Choose a saved client by number, or skip this for now.\n\n"
-            f"{client_lines}",
-            parse_mode="Markdown",
-            reply_markup=_invoice_client_keyboard(clients),
-        )
+        context.user_data["invoice_clients_page"] = 0
+        context.user_data["invoice_clients_query"] = ""
+        await _send_invoice_client_picker(update.message, clients, page=0, query="")
     else:
         context.user_data["mode"] = "invoice_items"
         await _send_invoice_items_prompt(update.message, "Invoice draft started. No saved clients found.")
@@ -713,10 +760,35 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             await _send_invoice_items_prompt(update.message, "No client selected.")
             return
 
-        client_options = context.user_data.get("client_options", {})
-        client_id = client_options.get(text)
+        clients = repo.list_clients(user_id)
+        filtered = _filtered_clients(clients, context.user_data.get("invoice_clients_query", ""))
+        total_pages = max(1, (len(filtered) + CLIENTS_PAGE_SIZE - 1) // CLIENTS_PAGE_SIZE)
+        page = max(0, min(context.user_data.get("invoice_clients_page", 0), total_pages - 1))
+        start = page * CLIENTS_PAGE_SIZE
+        visible_clients = filtered[start:start + CLIENTS_PAGE_SIZE]
+
+        client_id = None
+        if text.isdigit():
+            selection = int(text) - 1
+            if start <= selection < start + len(visible_clients):
+                client_id = visible_clients[selection - start].id
+        else:
+            if len(text) < 3:
+                await update.message.reply_text(
+                    "Send a listed client number, at least 3 letters to search, or type `skip` to continue without a client.",
+                    parse_mode="Markdown",
+                )
+                return
+            context.user_data["invoice_clients_query"] = text
+            context.user_data["invoice_clients_page"] = 0
+            await _send_invoice_client_picker(update.message, clients, page=0, query=text)
+            return
+
         if not client_id:
-            await update.message.reply_text("Send a listed client number, or type `skip` to continue without a client.", parse_mode="Markdown")
+            await update.message.reply_text(
+                "Send a visible client number, at least 3 letters to search, or type `skip` to continue without a client.",
+                parse_mode="Markdown",
+            )
             return
 
         client = repo.get_client(user_id, client_id)
@@ -1076,6 +1148,25 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         context.user_data["clients_page"] = 0
         await query.edit_message_text("Showing all saved clients.")
         await _send_clients_list(query.message, repo.list_clients(user_id), page=0, query="")
+        return
+
+    if query.data.startswith("invoice_clients_page:"):
+        page = int(query.data.split(":", 1)[1])
+        context.user_data["invoice_clients_page"] = page
+        await query.edit_message_text("Updated invoice client list.")
+        await _send_invoice_client_picker(
+            query.message,
+            repo.list_clients(user_id),
+            page=page,
+            query=context.user_data.get("invoice_clients_query", ""),
+        )
+        return
+
+    if query.data == "invoice_clients_clear_search":
+        context.user_data["invoice_clients_query"] = ""
+        context.user_data["invoice_clients_page"] = 0
+        await query.edit_message_text("Showing all invoice clients.")
+        await _send_invoice_client_picker(query.message, repo.list_clients(user_id), page=0, query="")
         return
 
     if query.data.startswith("skip_step:"):
