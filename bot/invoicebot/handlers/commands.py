@@ -22,6 +22,19 @@ DEVELOPMENT_NOTICE = (
     "Features may change, messages may be rough, and invoices should be reviewed before sending to real clients."
 )
 
+FIELD_LIMITS = {
+    "company name": 60,
+    "business address": 120,
+    "business email": 80,
+    "business phone": 32,
+    "GST number": 32,
+    "client name": 60,
+    "client company": 60,
+    "client email": 80,
+    "client phone": 32,
+    "client address": 120,
+}
+
 
 def _user_key(update: Update) -> str:
     user = update.effective_user
@@ -47,6 +60,17 @@ async def _deny_access(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         "This bot is currently locked to approved testers only.\n\n"
         "If you should have access, please contact the owner for beta access."
     )
+
+
+async def _validate_text_length(message: Message | None, label: str, value: str) -> bool:
+    limit = FIELD_LIMITS[label]
+    if len(value) <= limit:
+        return True
+    if message:
+        await message.reply_text(
+            f"{label.capitalize()} must be {limit} characters or fewer. Please send a shorter value."
+        )
+    return False
 
 
 async def _send_temporary_status(message: Message | None, text: str) -> Message | None:
@@ -518,6 +542,8 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
     if mode == "profile_company_name":
         profile = repo.get_or_create_profile(user_id)
+        if text.lower() != "skip" and not await _validate_text_length(update.message, "company name", text):
+            return
         if text.lower() != "skip" or not profile.company_name:
             profile.company_name = text
         repo.save_profile(user_id, profile)
@@ -531,6 +557,8 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
     if mode == "profile_address":
         profile = repo.get_or_create_profile(user_id)
+        if text.lower() != "skip" and not await _validate_text_length(update.message, "business address", text):
+            return
         if text.lower() != "skip" or not profile.address:
             profile.address = text
         repo.save_profile(user_id, profile)
@@ -544,6 +572,8 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
     if mode == "profile_email":
         profile = repo.get_or_create_profile(user_id)
+        if text.lower() != "skip" and not await _validate_text_length(update.message, "business email", text):
+            return
         if text.lower() != "skip" or not profile.email:
             profile.email = text
         repo.save_profile(user_id, profile)
@@ -557,6 +587,8 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
     if mode == "profile_phone":
         profile = repo.get_or_create_profile(user_id)
+        if text.lower() != "skip" and not await _validate_text_length(update.message, "business phone", text):
+            return
         if text.lower() != "skip" or not profile.phone:
             profile.phone = text
         repo.save_profile(user_id, profile)
@@ -570,6 +602,8 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
     if mode == "profile_gst_number":
         profile = repo.get_or_create_profile(user_id)
+        if text.lower() != "skip" and not await _validate_text_length(update.message, "GST number", text):
+            return
         if text.lower() != "skip" or not profile.gst_number:
             profile.gst_number = text
         repo.save_profile(user_id, profile)
@@ -591,30 +625,40 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         return
 
     if mode == "client_name":
+        if not await _validate_text_length(update.message, "client name", text):
+            return
         context.user_data["new_client_name"] = text
         context.user_data["mode"] = "client_company"
         await update.message.reply_text("Send the client company.", reply_markup=_skip_keyboard("client_company"))
         return
 
     if mode == "client_company":
+        if text.lower() != "skip" and not await _validate_text_length(update.message, "client company", text):
+            return
         context.user_data["new_client_company"] = "" if text.lower() == "skip" else text
         context.user_data["mode"] = "client_email"
         await update.message.reply_text("Send the client email.", reply_markup=_skip_keyboard("client_email"))
         return
 
     if mode == "client_email":
+        if text.lower() != "skip" and not await _validate_text_length(update.message, "client email", text):
+            return
         context.user_data["new_client_email"] = "" if text.lower() == "skip" else text
         context.user_data["mode"] = "client_phone"
         await update.message.reply_text("Send the client phone.", reply_markup=_skip_keyboard("client_phone"))
         return
 
     if mode == "client_phone":
+        if text.lower() != "skip" and not await _validate_text_length(update.message, "client phone", text):
+            return
         context.user_data["new_client_phone"] = "" if text.lower() == "skip" else text
         context.user_data["mode"] = "client_address"
         await update.message.reply_text("Send the client address.", reply_markup=_skip_keyboard("client_address"))
         return
 
     if mode == "client_address":
+        if text.lower() != "skip" and not await _validate_text_length(update.message, "client address", text):
+            return
         client = repo.add_client(
             user_id,
             name=context.user_data.pop("new_client_name", text),
@@ -638,6 +682,15 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             await update.message.reply_text("That client is no longer available. Use /clients to refresh the list.")
             return
         value = "" if text.lower() == "remove" else text
+        field_labels = {
+            "name": "client name",
+            "company": "client company",
+            "email": "client email",
+            "phone": "client phone",
+            "address": "client address",
+        }
+        if value and not await _validate_text_length(update.message, field_labels[field], value):
+            return
         setattr(client, field, value)
         repo.update_client(user_id, client)
         context.user_data["mode"] = None

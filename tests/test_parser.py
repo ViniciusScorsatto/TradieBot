@@ -1,4 +1,5 @@
 from invoicebot.services.parser import parse_line_items
+import pytest
 
 
 def test_parse_line_items_supports_quantity_syntax() -> None:
@@ -56,3 +57,10 @@ def test_parse_line_items_supports_times_before_quantity() -> None:
     assert items[0].description == "Labor"
     assert items[0].quantity == 2
     assert items[0].unit_price_cents == 9500
+
+
+def test_parse_line_items_rejects_long_descriptions() -> None:
+    long_description = "A" * 81
+
+    with pytest.raises(ValueError, match="80 characters or fewer"):
+        parse_line_items(f"{long_description} $50")

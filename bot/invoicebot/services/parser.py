@@ -5,6 +5,9 @@ import re
 from invoicebot.models import InvoiceItem
 
 
+MAX_ITEM_DESCRIPTION_LENGTH = 80
+
+
 NUMBER_WORDS = {
     "zero": "0",
     "one": "1",
@@ -97,6 +100,10 @@ def _build_item(description: str, quantity: float, unit_price: float) -> Invoice
         if cleaned_description
         else cleaned_description
     )
+    if len(normalized_description) > MAX_ITEM_DESCRIPTION_LENGTH:
+        raise ValueError(
+            f"Item descriptions must be {MAX_ITEM_DESCRIPTION_LENGTH} characters or fewer."
+        )
     return InvoiceItem(
         description=normalized_description,
         quantity=quantity,
