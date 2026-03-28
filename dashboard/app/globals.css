@@ -243,6 +243,22 @@ a {
   flex-wrap: wrap;
 }
 
+.credit-form {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.credit-input {
+  width: 82px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(44, 54, 57, 0.18);
+  background: white;
+  color: var(--ink);
+  font: inherit;
+}
+
 @media (max-width: 980px) {
   .shell {
     grid-template-columns: 1fr;

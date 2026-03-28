@@ -81,6 +81,46 @@ async function resetInvoiceCount(formData: FormData) {
   redirect(`/users?message=${encodeURIComponent(`Invoice count reset for ${userName}`)}`);
 }
 
+async function addInvoiceCredits(formData: FormData) {
+  "use server";
+
+  const userId = String(formData.get("userId") ?? "");
+  const userName = String(formData.get("userName") ?? "user");
+  const amount = Number(formData.get("amount") ?? "0");
+  if (!userId || !Number.isFinite(amount) || amount <= 0) {
+    redirect(`/users?message=${encodeURIComponent("Enter a valid invoice credit amount greater than 0.")}`);
+  }
+
+  await prisma.$executeRaw`
+    UPDATE users
+    SET paid_invoice_credits = paid_invoice_credits + ${Math.floor(amount)},
+        updated_at = NOW()
+    WHERE id = ${userId}
+  `;
+  revalidatePath("/users");
+  redirect(`/users?message=${encodeURIComponent(`Added ${Math.floor(amount)} invoice credits to ${userName}`)}`);
+}
+
+async function addVoiceCredits(formData: FormData) {
+  "use server";
+
+  const userId = String(formData.get("userId") ?? "");
+  const userName = String(formData.get("userName") ?? "user");
+  const amount = Number(formData.get("amount") ?? "0");
+  if (!userId || !Number.isFinite(amount) || amount <= 0) {
+    redirect(`/users?message=${encodeURIComponent("Enter a valid voice credit amount greater than 0.")}`);
+  }
+
+  await prisma.$executeRaw`
+    UPDATE users
+    SET paid_voice_credits = paid_voice_credits + ${Math.floor(amount)},
+        updated_at = NOW()
+    WHERE id = ${userId}
+  `;
+  revalidatePath("/users");
+  redirect(`/users?message=${encodeURIComponent(`Added ${Math.floor(amount)} voice credits to ${userName}`)}`);
+}
+
 export default async function UsersPage({
   searchParams
 }: {
@@ -151,6 +191,34 @@ export default async function UsersPage({
                   <td>{user.stripeCustomerId ?? "Not linked"}</td>
                   <td>
                     <div className="row-actions">
+                      <form action={addVoiceCredits} className="credit-form">
+                        <input type="hidden" name="userId" value={user.id} />
+                        <input type="hidden" name="userName" value={user.name} />
+                        <input
+                          className="credit-input"
+                          type="number"
+                          name="amount"
+                          min={1}
+                          step={1}
+                          defaultValue={paidVoiceBlock}
+                          aria-label={`Voice credits for ${user.name}`}
+                        />
+                        <ActionButton label="Add Voice" />
+                      </form>
+                      <form action={addInvoiceCredits} className="credit-form">
+                        <input type="hidden" name="userId" value={user.id} />
+                        <input type="hidden" name="userName" value={user.name} />
+                        <input
+                          className="credit-input"
+                          type="number"
+                          name="amount"
+                          min={1}
+                          step={1}
+                          defaultValue={paidInvoiceBlock}
+                          aria-label={`Invoice credits for ${user.name}`}
+                        />
+                        <ActionButton label="Add Invoices" />
+                      </form>
                       <form action={resetVoiceUsage}>
                         <input type="hidden" name="userId" value={user.id} />
                         <input type="hidden" name="userName" value={user.name} />
