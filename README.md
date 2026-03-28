@@ -31,6 +31,26 @@ Telegram-first invoicing product for tradies with:
 - `npm run prisma:generate`
 - `npm run prisma:migrate`
 - `python -m invoicebot.main` from `bot/`
+- `python scripts/reset_test_user.py --telegram-user-id <id>` to reset one user's test counters
+
+### Test Helpers
+
+Reset one user's usage and paid credits:
+
+```bash
+python scripts/reset_test_user.py --telegram-user-id 123456789
+```
+
+Set custom values for faster staging tests:
+
+```bash
+python scripts/reset_test_user.py \
+  --telegram-user-id 123456789 \
+  --invoice-count 9 \
+  --voice-count 19 \
+  --paid-invoice-credits 0 \
+  --paid-voice-credits 0
+```
 
 ## Project Shape
 
