@@ -17,6 +17,12 @@ from invoicebot.services.template_catalog import TEMPLATES
 from invoicebot.services.transcription import transcribe_audio_file
 
 
+DEVELOPMENT_NOTICE = (
+    "InvoiceBot is currently in development.\n\n"
+    "Features may change, messages may be rough, and invoices should be reviewed before sending to real clients."
+)
+
+
 def _user_key(update: Update) -> str:
     user = update.effective_user
     return str(user.id if user else "unknown")
@@ -24,6 +30,23 @@ def _user_key(update: Update) -> str:
 
 def _repo(context: ContextTypes.DEFAULT_TYPE) -> Repository:
     return context.application.bot_data["repo"]
+
+
+def _is_user_allowed(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bool:
+    allowed_ids = context.application.bot_data["settings"].allowed_telegram_user_ids
+    if not allowed_ids:
+        return True
+    return _user_key(update) in allowed_ids
+
+
+async def _deny_access(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    target_message = update.callback_query.message if update.callback_query else update.message
+    if not target_message:
+        return
+    await target_message.reply_text(
+        "This bot is currently locked to approved testers only.\n\n"
+        "If you should have access, please contact the owner for beta access."
+    )
 
 
 async def _send_temporary_status(message: Message | None, text: str) -> Message | None:
@@ -227,13 +250,20 @@ async def _send_checkout_prompt(
 
 
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if not _is_user_allowed(update, context):
+        await _deny_access(update, context)
+        return
     await update.message.reply_text(
+        f"{DEVELOPMENT_NOTICE}\n\n"
         "InvoiceBot helps tradies create invoices from voice or text in Telegram.\n\n"
         "Use /profile to set up your business, /template to pick a layout, and /invoice to start a draft."
     )
 
 
 async def invoice_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if not _is_user_allowed(update, context):
+        await _deny_access(update, context)
+        return
     repo = _repo(context)
     user_id = _user_key(update)
     draft = repo.create_draft(user_id)
@@ -259,6 +289,9 @@ async def invoice_command(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 
 
 async def generate_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if not _is_user_allowed(update, context):
+        await _deny_access(update, context)
+        return
     repo = _repo(context)
     user_id = _user_key(update)
     draft = repo.get_draft(user_id)
@@ -300,6 +333,9 @@ async def generate_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -
 
 
 async def profile_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if not _is_user_allowed(update, context):
+        await _deny_access(update, context)
+        return
     repo = _repo(context)
     profile = repo.get_or_create_profile(_user_key(update))
     context.user_data["mode"] = "profile_company_name"
@@ -324,6 +360,9 @@ def _profile_step_prompt(profile, field: str, label: str, next_text: str) -> str
 
 
 async def template_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if not _is_user_allowed(update, context):
+        await _deny_access(update, context)
+        return
     options = "\n".join(f"{index + 1}. {template.name} - {template.description}" for index, template in enumerate(TEMPLATES))
     context.user_data["mode"] = "template_select"
     await update.message.reply_text(
@@ -333,17 +372,26 @@ async def template_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -
 
 
 async def new_client_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if not _is_user_allowed(update, context):
+        await _deny_access(update, context)
+        return
     context.user_data["mode"] = "client_name"
     await update.message.reply_text("Send the client name to add a new client.")
 
 
 async def clients_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if not _is_user_allowed(update, context):
+        await _deny_access(update, context)
+        return
     repo = _repo(context)
     clients = repo.list_clients(_user_key(update))
     await _send_clients_list(update.message, clients)
 
 
 async def history_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if not _is_user_allowed(update, context):
+        await _deny_access(update, context)
+        return
     repo = _repo(context)
     history = repo.list_history(_user_key(update))
     if not history:
@@ -357,6 +405,9 @@ async def history_command(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 
 
 async def repeat_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if not _is_user_allowed(update, context):
+        await _deny_access(update, context)
+        return
     repo = _repo(context)
     history = repo.list_history(_user_key(update))
     if not history:
@@ -368,12 +419,18 @@ async def repeat_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
 
 async def support_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if not _is_user_allowed(update, context):
+        await _deny_access(update, context)
+        return
     context.user_data["mode"] = "support_type"
     await update.message.reply_text("Send a ticket type: Bug, Claim, Improvement, or Idea.")
 
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if not update.message:
+        return
+    if not _is_user_allowed(update, context):
+        await _deny_access(update, context)
         return
 
     if update.message.voice or update.message.audio:
@@ -705,6 +762,12 @@ async def _handle_voice_message(update: Update, context: ContextTypes.DEFAULT_TY
 async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
     await query.answer()
+    if not _is_user_allowed(update, context):
+        await query.edit_message_text(
+            "This bot is currently locked to approved testers only.\n\n"
+            "If you should have access, please contact the owner for beta access."
+        )
+        return
     repo = _repo(context)
     user_id = _user_key(update)
 
