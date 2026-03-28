@@ -35,7 +35,7 @@ def test_parse_line_items_supports_comma_price_shorthand() -> None:
     items = parse_line_items("materials,50")
 
     assert len(items) == 1
-    assert items[0].description == "materials"
+    assert items[0].description == "Materials"
     assert items[0].quantity == 1
     assert items[0].unit_price_cents == 5000
 

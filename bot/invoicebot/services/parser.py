@@ -91,8 +91,14 @@ def _normalize_spoken_numbers(text: str) -> str:
 
 
 def _build_item(description: str, quantity: float, unit_price: float) -> InvoiceItem:
+    cleaned_description = description.strip(" ,.-")
+    normalized_description = (
+        cleaned_description[:1].upper() + cleaned_description[1:]
+        if cleaned_description
+        else cleaned_description
+    )
     return InvoiceItem(
-        description=description.strip(" ,.-"),
+        description=normalized_description,
         quantity=quantity,
         unit_price_cents=int(round(unit_price * 100)),
     )
