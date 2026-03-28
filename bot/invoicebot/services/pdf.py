@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+import base64
 from datetime import timedelta
 from io import BytesIO
 
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4
+from reportlab.lib.utils import ImageReader
 from reportlab.pdfgen import canvas
 
 from invoicebot.models import Client, InvoiceDraft, Profile
@@ -41,6 +43,35 @@ def _money(cents: int) -> str:
 
 def _money_unit(cents: int) -> str:
     return f"{cents / 100:,.2f}"
+
+
+def _draw_logo(pdf: canvas.Canvas, profile: Profile, *, x: float, y: float, width: float, height: float, accent) -> None:
+    pdf.setStrokeColor(accent)
+    pdf.roundRect(x, y, width, height, 8, fill=0, stroke=1)
+
+    if not profile.logo_url.startswith("data:image/"):
+        pdf.setFillColor(accent)
+        pdf.setFont("Helvetica-Bold", 14)
+        pdf.drawCentredString(x + (width / 2), y + (height / 2) - 4, "Your Logo")
+        return
+
+    try:
+        _, encoded = profile.logo_url.split(",", 1)
+        image_bytes = base64.b64decode(encoded)
+        image = ImageReader(BytesIO(image_bytes))
+        image_width, image_height = image.getSize()
+    except Exception:
+        pdf.setFillColor(accent)
+        pdf.setFont("Helvetica-Bold", 14)
+        pdf.drawCentredString(x + (width / 2), y + (height / 2) - 4, "Your Logo")
+        return
+
+    scale = min((width - 16) / image_width, (height - 12) / image_height)
+    draw_width = image_width * scale
+    draw_height = image_height * scale
+    draw_x = x + ((width - draw_width) / 2)
+    draw_y = y + ((height - draw_height) / 2)
+    pdf.drawImage(image, draw_x, draw_y, draw_width, draw_height, preserveAspectRatio=True, mask="auto")
 
 
 def _draw_label_value_block(
@@ -89,11 +120,7 @@ def render_invoice_pdf(profile: Profile, draft: InvoiceDraft, client: Client | N
 
     pdf.setFillColor(accent)
     pdf.rect(0, height - 26, width, 26, fill=1, stroke=0)
-    pdf.setStrokeColor(accent)
-    pdf.roundRect(page_left, height - 82, 110, 34, 8, fill=0, stroke=1)
-    pdf.setFillColor(accent)
-    pdf.setFont("Helvetica-Bold", 14)
-    pdf.drawCentredString(page_left + 55, height - 61, "Your Logo")
+    _draw_logo(pdf, profile, x=page_left, y=height - 82, width=110, height=34, accent=accent)
 
     pdf.setFillColor(colors.HexColor("#636a73"))
     pdf.setFont("Helvetica-Bold", 10)

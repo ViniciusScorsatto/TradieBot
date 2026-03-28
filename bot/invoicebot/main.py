@@ -47,7 +47,7 @@ def build_application() -> Application:
     application.add_handler(CommandHandler("support", support_command))
     application.add_handler(CallbackQueryHandler(handle_callback))
     application.add_handler(
-        MessageHandler((filters.TEXT | filters.VOICE | filters.AUDIO) & ~filters.COMMAND, handle_message)
+        MessageHandler((filters.TEXT | filters.VOICE | filters.AUDIO | filters.PHOTO | filters.Document.IMAGE) & ~filters.COMMAND, handle_message)
     )
     return application
 

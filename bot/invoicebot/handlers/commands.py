@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+import base64
 from dataclasses import replace
+from io import BytesIO
 from tempfile import NamedTemporaryFile
 import traceback
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Message, Update
 from telegram.ext import ContextTypes
+from PIL import Image
 
 from invoicebot.models import SupportTicket
 from invoicebot.services.billing import evaluate_quota
@@ -35,6 +38,13 @@ FIELD_LIMITS = {
     "client phone": 32,
     "client address": 120,
 }
+
+LOGO_MAX_FILE_SIZE = 5 * 1024 * 1024
+LOGO_MIN_WIDTH = 120
+LOGO_MIN_HEIGHT = 60
+LOGO_MAX_WIDTH = 5000
+LOGO_MAX_HEIGHT = 5000
+ALLOWED_LOGO_MIME_TYPES = {"image/png", "image/jpeg"}
 
 
 def _user_key(update: Update) -> str:
@@ -84,6 +94,78 @@ async def _validate_text_length(message: Message | None, label: str, value: str)
             f"{label.capitalize()} must be {limit} characters or fewer. Please send a shorter value."
         )
     return False
+
+
+def _logo_prompt(profile) -> tuple[str, InlineKeyboardMarkup | None]:
+    if profile.logo_url:
+        return (
+            "Saved. Send a new logo as a photo or PNG/JPG image, or keep the current one.",
+            _skip_keyboard("profile_logo", label="Keep current logo"),
+        )
+    return (
+        "Saved. Send your logo as a Telegram photo or a PNG/JPG file, or skip this for now.",
+        _skip_keyboard("profile_logo", label="Skip logo"),
+    )
+
+
+def _is_image_document(document) -> bool:
+    if not document:
+        return False
+    return (document.mime_type or "").lower() in ALLOWED_LOGO_MIME_TYPES
+
+
+async def _store_profile_logo(message: Message | None, context: ContextTypes.DEFAULT_TYPE, user_id: str) -> bool:
+    if not message:
+        return False
+
+    document = message.document if _is_image_document(message.document) else None
+    photo = message.photo[-1] if message.photo else None
+    media = document or photo
+    if not media:
+        await message.reply_text("Send a photo or PNG/JPG image file for the logo, or use the skip button.")
+        return False
+
+    file_size = getattr(media, "file_size", 0) or 0
+    if file_size > LOGO_MAX_FILE_SIZE:
+        await message.reply_text("Logo images must be smaller than 5 MB. A normal phone photo or PNG should work fine.")
+        return False
+
+    telegram_file = await context.bot.get_file(media.file_id)
+    buffer = BytesIO()
+    await telegram_file.download_to_memory(out=buffer)
+    raw_bytes = buffer.getvalue()
+
+    try:
+        with Image.open(BytesIO(raw_bytes)) as image:
+            image.load()
+            image_format = (image.format or "").upper()
+            width, height = image.size
+    except Exception:
+        await message.reply_text("I couldn't read that image. Please send a normal JPG or PNG logo.")
+        return False
+
+    if image_format not in {"PNG", "JPEG", "JPG"}:
+        await message.reply_text("Please send the logo as a PNG or JPG image.")
+        return False
+    if width < LOGO_MIN_WIDTH or height < LOGO_MIN_HEIGHT:
+        await message.reply_text("That image is a bit too small. Please use one that is at least 120 x 60 pixels.")
+        return False
+    if width > LOGO_MAX_WIDTH or height > LOGO_MAX_HEIGHT:
+        await message.reply_text("That image is too large. Please use one under 5000 x 5000 pixels.")
+        return False
+
+    aspect_ratio = width / max(height, 1)
+    if aspect_ratio < 0.2 or aspect_ratio > 5.0:
+        await message.reply_text("That logo shape is too extreme for the invoice header. Please use something closer to a normal logo image.")
+        return False
+
+    profile = _repo(context).get_or_create_profile(user_id)
+    mime_type = "image/png" if image_format == "PNG" else "image/jpeg"
+    profile.logo_url = f"data:{mime_type};base64,{base64.b64encode(raw_bytes).decode('ascii')}"
+    _repo(context).save_profile(user_id, profile)
+    context.user_data["mode"] = None
+    await message.reply_text("Logo saved. It will be used on your invoice PDFs.")
+    return True
 
 
 async def _send_temporary_status(message: Message | None, text: str) -> Message | None:
@@ -494,14 +576,21 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         await _deny_access(update, context)
         return
 
+    mode = context.user_data.get("mode")
+    if mode == "profile_logo" and (update.message.photo or _is_image_document(update.message.document)):
+        await _store_profile_logo(update.message, context, _user_key(update))
+        return
+
     if update.message.voice or update.message.audio:
         await _handle_voice_message(update, context)
         return
 
     repo = _repo(context)
     user_id = _user_key(update)
-    mode = context.user_data.get("mode")
-    text = update.message.text.strip()
+    text = (update.message.text or update.message.caption or "").strip()
+    if not text:
+        await update.message.reply_text("Send text here, or use /profile if you want to upload a logo.")
+        return
 
     if mode == "invoice_items":
         draft = repo.get_draft(user_id) or repo.create_draft(user_id)
@@ -644,8 +733,17 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         if text.lower() != "skip" or not profile.gst_number:
             profile.gst_number = text
         repo.save_profile(user_id, profile)
-        context.user_data["mode"] = None
-        await update.message.reply_text("Profile saved. Use /template to pick your default invoice layout.")
+        context.user_data["mode"] = "profile_logo"
+        logo_text, keyboard = _logo_prompt(profile)
+        await update.message.reply_text(logo_text, reply_markup=keyboard)
+        return
+
+    if mode == "profile_logo":
+        if text.lower() == "skip":
+            context.user_data["mode"] = None
+            await update.message.reply_text("Profile saved. Use /template to pick your default invoice layout.")
+            return
+        await update.message.reply_text("Send your logo as a photo or PNG/JPG file, or use the skip button.")
         return
 
     if mode == "template_select":
@@ -921,8 +1019,15 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             )
             return
         if step == "profile_gst_number":
-            context.user_data["mode"] = None
+            context.user_data["mode"] = "profile_logo"
+            profile = repo.get_or_create_profile(user_id)
             await query.edit_message_text("Keeping current GST number.")
+            logo_text, keyboard = _logo_prompt(profile)
+            await query.message.reply_text(logo_text, reply_markup=keyboard)
+            return
+        if step == "profile_logo":
+            context.user_data["mode"] = None
+            await query.edit_message_text("Skipping logo upload for now.")
             await query.message.reply_text("Profile saved. Use /template to pick your default invoice layout.")
             return
         if step == "client_company":
