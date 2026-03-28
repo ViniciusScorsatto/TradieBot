@@ -45,6 +45,7 @@ LOGO_MIN_HEIGHT = 60
 LOGO_MAX_WIDTH = 5000
 LOGO_MAX_HEIGHT = 5000
 ALLOWED_LOGO_MIME_TYPES = {"image/png", "image/jpeg"}
+CLIENTS_PAGE_SIZE = 6
 
 
 def _user_key(update: Update) -> str:
@@ -208,15 +209,47 @@ def _client_summary(client) -> str:
     return f"{client.name}" + (f" ({' • '.join(extras)})" if extras else "")
 
 
-def _clients_keyboard(clients) -> InlineKeyboardMarkup:
+def _client_matches_query(client, query: str) -> bool:
+    if not query:
+        return True
+    normalized = query.strip().lower()
+    candidates = [client.name, client.company]
+    for candidate in candidates:
+        text = (candidate or "").lower()
+        if text.startswith(normalized):
+            return True
+        if any(word.startswith(normalized) for word in text.split()):
+            return True
+    return False
+
+
+def _filtered_clients(clients, query: str) -> list:
+    return [client for client in clients if _client_matches_query(client, query)]
+
+
+def _clients_keyboard(clients, *, page: int = 0, query: str = "") -> InlineKeyboardMarkup:
+    filtered = _filtered_clients(clients, query)
+    total_pages = max(1, (len(filtered) + CLIENTS_PAGE_SIZE - 1) // CLIENTS_PAGE_SIZE)
+    safe_page = max(0, min(page, total_pages - 1))
+    start = safe_page * CLIENTS_PAGE_SIZE
+    visible_clients = filtered[start:start + CLIENTS_PAGE_SIZE]
     rows: list[list[InlineKeyboardButton]] = []
-    for client in clients:
+    for client in visible_clients:
         rows.append(
             [
                 InlineKeyboardButton(f"Edit {client.name}", callback_data=f"client_edit:{client.id}"),
                 InlineKeyboardButton(f"Delete {client.name}", callback_data=f"client_delete:{client.id}"),
             ]
         )
+    navigation: list[InlineKeyboardButton] = []
+    if safe_page > 0:
+        navigation.append(InlineKeyboardButton("Prev", callback_data=f"clients_page:{safe_page - 1}"))
+    if safe_page < total_pages - 1:
+        navigation.append(InlineKeyboardButton("Next", callback_data=f"clients_page:{safe_page + 1}"))
+    if navigation:
+        rows.append(navigation)
+    if query:
+        rows.append([InlineKeyboardButton("Clear search", callback_data="clients_clear_search")])
     return InlineKeyboardMarkup(rows)
 
 
@@ -245,16 +278,35 @@ def _client_edit_keyboard(client_id: str) -> InlineKeyboardMarkup:
     )
 
 
-async def _send_clients_list(message: Message | None, clients) -> None:
+async def _send_clients_list(message: Message | None, clients, *, page: int = 0, query: str = "") -> None:
     if not message:
         return
     if not clients:
         await message.reply_text("No saved clients yet. Use /newclient to add one.")
         return
-    lines = "\n".join(f"{index + 1}. {_client_summary(client)}" for index, client in enumerate(clients))
+    filtered = _filtered_clients(clients, query)
+    if not filtered:
+        await message.reply_text(
+            f"No clients match `{query}`.\n\nSend at least 3 starting letters to search by name or company, or use the button below to clear the search.",
+            parse_mode="Markdown",
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("Clear search", callback_data="clients_clear_search")]]),
+        )
+        return
+    total_pages = max(1, (len(filtered) + CLIENTS_PAGE_SIZE - 1) // CLIENTS_PAGE_SIZE)
+    safe_page = max(0, min(page, total_pages - 1))
+    start = safe_page * CLIENTS_PAGE_SIZE
+    visible_clients = filtered[start:start + CLIENTS_PAGE_SIZE]
+    lines = "\n".join(f"{start + index + 1}. {_client_summary(client)}" for index, client in enumerate(visible_clients))
+    header = f"Saved clients (page {safe_page + 1}/{total_pages})"
+    if query:
+        header += f"\nSearch: `{query}`"
     await message.reply_text(
-        "Saved clients:\n\n" + lines,
-        reply_markup=_clients_keyboard(clients),
+        header
+        + "\n\n"
+        + lines
+        + "\n\nSend at least 3 starting letters to search by client name or company.",
+        parse_mode="Markdown",
+        reply_markup=_clients_keyboard(clients, page=safe_page, query=query),
     )
 
 
@@ -527,8 +579,11 @@ async def clients_command(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         await _deny_access(update, context)
         return
     repo = _repo(context)
+    context.user_data["mode"] = "clients_search"
+    context.user_data["clients_page"] = 0
+    context.user_data["clients_query"] = ""
     clients = repo.list_clients(_user_key(update))
-    await _send_clients_list(update.message, clients)
+    await _send_clients_list(update.message, clients, page=0, query="")
 
 
 async def history_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -806,6 +861,23 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         await update.message.reply_text(f"Saved client {_client_summary(client)}.")
         return
 
+    if mode == "clients_search":
+        if text.lower() in {"all", "clear"}:
+            context.user_data["clients_query"] = ""
+            context.user_data["clients_page"] = 0
+            await _send_clients_list(update.message, repo.list_clients(user_id), page=0, query="")
+            return
+        if len(text) < 3:
+            await update.message.reply_text(
+                "Send at least 3 letters to search clients by name or company, or send `all` to show the full list again.",
+                parse_mode="Markdown",
+            )
+            return
+        context.user_data["clients_query"] = text
+        context.user_data["clients_page"] = 0
+        await _send_clients_list(update.message, repo.list_clients(user_id), page=0, query=text)
+        return
+
     if mode == "edit_client_field":
         client_id = context.user_data.get("edit_client_id")
         field = context.user_data.get("edit_client_field")
@@ -968,7 +1040,31 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     if query.data == "client_edit_done":
         clients = repo.list_clients(user_id)
         await query.edit_message_text("Client edit finished.")
-        await _send_clients_list(query.message, clients)
+        await _send_clients_list(
+            query.message,
+            clients,
+            page=context.user_data.get("clients_page", 0),
+            query=context.user_data.get("clients_query", ""),
+        )
+        return
+
+    if query.data.startswith("clients_page:"):
+        page = int(query.data.split(":", 1)[1])
+        context.user_data["clients_page"] = page
+        await query.edit_message_text("Updated client list.")
+        await _send_clients_list(
+            query.message,
+            repo.list_clients(user_id),
+            page=page,
+            query=context.user_data.get("clients_query", ""),
+        )
+        return
+
+    if query.data == "clients_clear_search":
+        context.user_data["clients_query"] = ""
+        context.user_data["clients_page"] = 0
+        await query.edit_message_text("Showing all saved clients.")
+        await _send_clients_list(query.message, repo.list_clients(user_id), page=0, query="")
         return
 
     if query.data.startswith("skip_step:"):
@@ -1112,7 +1208,12 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             return
         repo.delete_client(user_id, client_id)
         await query.edit_message_text(f"Deleted client {client.name}.")
-        await _send_clients_list(query.message, repo.list_clients(user_id))
+        await _send_clients_list(
+            query.message,
+            repo.list_clients(user_id),
+            page=context.user_data.get("clients_page", 0),
+            query=context.user_data.get("clients_query", ""),
+        )
         return
 
     if query.data.startswith("edit_item:"):
