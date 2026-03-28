@@ -5,7 +5,7 @@ export default function ContactPage() {
         <div>
           <h2>Contact</h2>
           <p>
-            If you want a walkthrough, need support, or want to talk about a rollout for your trade,
+            If you want a walkthrough, need support, want to talk about a rollout, or need help with a privacy request,
             this page is the fallback when Telegram is not the right first step.
           </p>
         </div>
@@ -13,8 +13,9 @@ export default function ContactPage() {
       <article className="sectionCard">
         <h3>Reach the team</h3>
         <p>Email: hello@invoicebot.nz</p>
+        <p>Privacy: privacy@invoicebot.nz</p>
         <p>Telegram: `@invoicebot_support`</p>
-        <p>Best for: support, feedback, and early access conversations.</p>
+        <p>Best for: support, feedback, privacy requests, and early access conversations.</p>
       </article>
     </main>
   );

@@ -580,6 +580,32 @@ a {
   color: rgba(235, 245, 255, 0.74);
 }
 
+.footerRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.footerRow p {
+  margin: 0;
+  max-width: 58ch;
+  line-height: 1.6;
+}
+
+.footerLinks {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 14px;
+}
+
+.footerLinks a {
+  padding: 8px 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.06);
+}
+
 @media (max-width: 1120px) {
   .hero {
     grid-template-columns: 1fr;
@@ -635,5 +661,10 @@ a {
 
   .badgeBottom {
     left: 10px;
+  }
+
+  .footerRow {
+    flex-direction: column;
+    align-items: flex-start;
   }
 }

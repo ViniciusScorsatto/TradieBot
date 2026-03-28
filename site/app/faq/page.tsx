@@ -5,7 +5,8 @@ export default function FaqPage() {
     ["Do I choose a template?", "Yes. Pick from five curated templates and keep one as your default."],
     ["Is voice unlimited?", "No. Voice includes 20 free transcriptions per month, capped at 60 seconds each, and is intended to become a premium-metered feature so the product stays sustainable."],
     ["Is there customer login?", "No customer portal in v1. The product experience is Telegram-first."],
-    ["What if I need support?", "Use the support flow inside the bot or contact the team through the website contact page."]
+    ["What if I need support?", "Use the support flow inside the bot or contact the team through the website contact page."],
+    ["How do privacy requests work?", "Use the privacy contact details on the website if you need access, correction, or deletion help."]
   ];
 
   return (

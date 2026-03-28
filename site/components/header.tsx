@@ -13,6 +13,7 @@ export function Header() {
             <Link href="/">Home</Link>
             <Link href="/pricing">Pricing</Link>
             <Link href="/faq">FAQ</Link>
+            <Link href="/privacy">Privacy</Link>
             <Link href="/contact">Contact</Link>
           </div>
           <a
