@@ -29,6 +29,9 @@ DEVELOPMENT_NOTICE = (
     "Features may change, messages may be rough, and invoices should be reviewed before sending to real clients."
 )
 
+SUPPORT_SUBJECT_LIMIT = 80
+SUPPORT_BODY_LIMIT = 1200
+
 FIELD_LIMITS = {
     "company name": 60,
     "business address": 120,
@@ -207,6 +210,21 @@ def _voice_limit_keyboard(settings) -> InlineKeyboardMarkup:
 
 def _skip_keyboard(step: str, *, label: str = "Skip") -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup([[InlineKeyboardButton(label, callback_data=f"skip_step:{step}")]])
+
+
+def _support_type_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        [
+            [
+                InlineKeyboardButton("Bug", callback_data="support_type:BUG"),
+                InlineKeyboardButton("Claim", callback_data="support_type:CLAIM"),
+            ],
+            [
+                InlineKeyboardButton("Improvement", callback_data="support_type:IMPROVEMENT"),
+                InlineKeyboardButton("Idea", callback_data="support_type:IDEA"),
+            ],
+        ]
+    )
 
 
 def _item_line(item, index: int) -> str:
@@ -749,7 +767,10 @@ async def support_command(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         await _deny_access(update, context)
         return
     context.user_data["mode"] = "support_type"
-    await update.message.reply_text("Send a ticket type: Bug, Claim, Improvement, or Idea.")
+    await update.message.reply_text(
+        "What kind of ticket do you want to send?",
+        reply_markup=_support_type_keyboard(),
+    )
 
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -1130,23 +1151,50 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     if mode == "support_type":
         normalized = text.upper()
         if normalized not in {"BUG", "CLAIM", "IMPROVEMENT", "IDEA"}:
-            await update.message.reply_text("Send one of: Bug, Claim, Improvement, Idea.")
+            await update.message.reply_text(
+                "Choose a ticket type below, or send one of: Bug, Claim, Improvement, Idea.",
+                reply_markup=_support_type_keyboard(),
+            )
             return
         context.user_data["support_type"] = normalized
+        context.user_data["mode"] = "support_subject"
+        await update.message.reply_text(
+            f"{normalized.title()} selected.\n\nSend a short subject line so the ticket is easy to scan in admin.",
+        )
+        return
+
+    if mode == "support_subject":
+        if len(text) > SUPPORT_SUBJECT_LIMIT:
+            await update.message.reply_text(
+                f"Keep the subject to {SUPPORT_SUBJECT_LIMIT} characters or fewer."
+            )
+            return
+        context.user_data["support_subject"] = text
         context.user_data["mode"] = "support_body"
-        await update.message.reply_text("Describe the issue or idea.")
+        await update.message.reply_text(
+            "Now send the full details.\n\nInclude anything useful like what happened, what you expected, and any steps to reproduce it."
+        )
         return
 
     if mode == "support_body":
+        if len(text) > SUPPORT_BODY_LIMIT:
+            await update.message.reply_text(
+                f"Keep the ticket details under {SUPPORT_BODY_LIMIT} characters so it stays readable."
+            )
+            return
         ticket = SupportTicket(
             user_id=user_id,
             kind=context.user_data.get("support_type", "IDEA"),
-            subject=f"{context.user_data.get('support_type', 'IDEA').title()} ticket",
+            subject=context.user_data.get("support_subject", f"{context.user_data.get('support_type', 'IDEA').title()} ticket"),
             body=text,
         )
         repo.record_ticket(ticket)
         context.user_data["mode"] = None
-        await update.message.reply_text("Ticket submitted. We’ll follow up in Telegram.")
+        context.user_data.pop("support_type", None)
+        context.user_data.pop("support_subject", None)
+        await update.message.reply_text(
+            f"Ticket submitted: {ticket.subject}\n\nWe’ll follow up in Telegram."
+        )
         return
 
     await update.message.reply_text(
@@ -1258,6 +1306,18 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         draft = repo.get_draft(user_id)
         await query.edit_message_text("Draft still open. Use the controls below or send more line items.")
         await _send_draft_editor(query.message, draft)
+        return
+
+    if query.data.startswith("support_type:"):
+        support_type = query.data.split(":", 1)[1]
+        if support_type not in {"BUG", "CLAIM", "IMPROVEMENT", "IDEA"}:
+            await query.edit_message_text("That support type is not available anymore.")
+            return
+        context.user_data["support_type"] = support_type
+        context.user_data["mode"] = "support_subject"
+        await query.edit_message_text(
+            f"{support_type.title()} selected.\n\nSend a short subject line so the ticket is easy to scan in admin."
+        )
         return
 
     if query.data == "client_edit_done":
