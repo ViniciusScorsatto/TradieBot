@@ -417,13 +417,19 @@ def _draft_editor_keyboard(draft) -> InlineKeyboardMarkup:
                 InlineKeyboardButton(f"Delete {index + 1}", callback_data=f"delete_item:{index}"),
             ]
         )
-        rows.append(
+    return InlineKeyboardMarkup(rows)
+
+
+def _current_item_keyboard(index: int) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        [
             [
                 InlineKeyboardButton("Discount %", callback_data=f"discount_pct:{index}"),
-                InlineKeyboardButton("Discount value", callback_data=f"discount_value:{index}"),
-            ]
-        )
-    return InlineKeyboardMarkup(rows)
+                InlineKeyboardButton("Discount $", callback_data=f"discount_value:{index}"),
+            ],
+            [InlineKeyboardButton("Edit draft", callback_data="edit_draft")],
+        ]
+    )
 
 
 async def _send_draft_editor(message: Message | None, draft) -> None:
@@ -773,10 +779,14 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             lines = "\n".join(
                 _item_line(item, start_index + offset) for offset, item in enumerate(new_items)
             )
-            await update.message.reply_text(
-                f"Added {len(new_items)} item(s).\n\n{lines}\n\nYou now have {len(draft.items)} item(s) in this draft.",
-                reply_markup=_draft_editor_keyboard(draft),
-            )
+            response = f"Added {len(new_items)} item(s).\n\n{lines}\n\nYou now have {len(draft.items)} item(s) in this draft."
+            if len(new_items) == 1:
+                response += "\n\nDiscount for this item:"
+                reply_markup = _current_item_keyboard(start_index)
+            else:
+                response += "\n\nUse Edit draft to change or delete any item."
+                reply_markup = InlineKeyboardMarkup([[InlineKeyboardButton("Edit draft", callback_data="edit_draft")]])
+            await update.message.reply_text(response, reply_markup=reply_markup)
         except ValueError as exc:
             await update.message.reply_text(str(exc))
         return
@@ -808,8 +818,8 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         context.user_data["mode"] = "invoice_items"
         context.user_data.pop("edit_item_index", None)
         await update.message.reply_text(
-            f"Updated item {item_index + 1}.\n\n{_item_line(replacement_items[0], item_index)}",
-            reply_markup=_draft_editor_keyboard(draft),
+            f"Updated item {item_index + 1}.\n\n{_item_line(replacement_items[0], item_index)}\n\nDiscount for this item:",
+            reply_markup=_current_item_keyboard(item_index),
         )
         return
 
@@ -863,9 +873,9 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         await update.message.reply_text(
             (
                 f"{'Removed' if discount_cents == 0 else 'Updated'} discount for item {item_index + 1}.\n\n"
-                f"{_item_line(updated_item, item_index)}"
+                f"{_item_line(updated_item, item_index)}\n\nDiscount for this item:"
             ),
-            reply_markup=_draft_editor_keyboard(draft),
+            reply_markup=_current_item_keyboard(item_index),
         )
         return
 
@@ -1205,8 +1215,11 @@ async def _handle_voice_message(update: Update, context: ContextTypes.DEFAULT_TY
             "Voice note transcribed and added.\n\n"
             f"Transcript:\n{transcript}\n\n"
             f"{lines}\n\n"
-            f"You now have {len(draft.items)} item(s) in this draft.",
-            reply_markup=_draft_editor_keyboard(draft),
+            f"You now have {len(draft.items)} item(s) in this draft."
+            + ("\n\nDiscount for this item:" if len(new_items) == 1 else "\n\nUse Edit draft to change or delete any item."),
+            reply_markup=_current_item_keyboard(start_index)
+            if len(new_items) == 1
+            else InlineKeyboardMarkup([[InlineKeyboardButton("Edit draft", callback_data="edit_draft")]]),
         )
     except ValueError:
         await message.reply_text(
