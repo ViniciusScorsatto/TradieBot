@@ -168,156 +168,54 @@ class PostgresRepository:
         return psycopg.connect(self.database_url, row_factory=dict_row)
 
     def ensure_schema(self) -> None:
-        statements = [
-            """
-            CREATE TABLE IF NOT EXISTS users (
-              id TEXT PRIMARY KEY,
-              telegram_user_id TEXT UNIQUE NOT NULL,
-              telegram_handle TEXT,
-              first_name TEXT,
-              last_name TEXT,
-              plan_tier TEXT NOT NULL DEFAULT 'FREE',
-              stripe_customer_id TEXT UNIQUE,
-              invoice_count_this_month INTEGER NOT NULL DEFAULT 0,
-              voice_transcriptions_this_month INTEGER NOT NULL DEFAULT 0,
-              paid_invoice_credits INTEGER NOT NULL DEFAULT 0,
-              paid_voice_credits INTEGER NOT NULL DEFAULT 0,
-              joined_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-              updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-            )
-            """,
-            """
-            CREATE TABLE IF NOT EXISTS profiles (
-              id TEXT PRIMARY KEY,
-              user_id TEXT UNIQUE NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-              company_name TEXT,
-              address TEXT,
-              gst_number TEXT,
-              email TEXT,
-              phone TEXT,
-              bank_details TEXT,
-              logo_url TEXT,
-              default_template_id TEXT NOT NULL DEFAULT 'classic-blue',
-              invoice_prefix TEXT NOT NULL DEFAULT 'INV',
-              next_invoice_number INTEGER NOT NULL DEFAULT 1,
-              created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-              updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-            )
-            """,
-            """
-            CREATE TABLE IF NOT EXISTS clients (
-              id TEXT PRIMARY KEY,
-              user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-              name TEXT NOT NULL,
-              company TEXT,
-              email TEXT,
-              phone TEXT,
-              address TEXT,
-              created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-              updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-            )
-            """,
-            """
-            CREATE TABLE IF NOT EXISTS invoice_drafts (
-              id TEXT PRIMARY KEY,
-              user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-              client_id TEXT,
-              status TEXT NOT NULL DEFAULT 'ACTIVE',
-              notes TEXT,
-              subtotal_cents INTEGER NOT NULL DEFAULT 0,
-              gst_cents INTEGER NOT NULL DEFAULT 0,
-              total_cents INTEGER NOT NULL DEFAULT 0,
-              created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-              updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-            )
-            """,
-            """
-            CREATE TABLE IF NOT EXISTS invoice_draft_items (
-              id TEXT PRIMARY KEY,
-              draft_id TEXT NOT NULL REFERENCES invoice_drafts(id) ON DELETE CASCADE,
-              description TEXT NOT NULL,
-              quantity DOUBLE PRECISION NOT NULL DEFAULT 1,
-              unit_price INTEGER NOT NULL,
-              discount_cents INTEGER NOT NULL DEFAULT 0,
-              discount_percent DOUBLE PRECISION,
-              line_total INTEGER NOT NULL,
-              created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-            )
-            """,
-            """
-            CREATE TABLE IF NOT EXISTS invoices (
-              id TEXT PRIMARY KEY,
-              user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-              client_id TEXT,
-              profile_snapshot JSONB NOT NULL,
-              invoice_number TEXT NOT NULL,
-              template_id TEXT NOT NULL,
-              subtotal_cents INTEGER NOT NULL,
-              gst_cents INTEGER NOT NULL,
-              total_cents INTEGER NOT NULL,
-              notes TEXT,
-              pdf_url TEXT,
-              created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-            )
-            """,
-            """
-            CREATE TABLE IF NOT EXISTS invoice_items (
-              id TEXT PRIMARY KEY,
-              invoice_id TEXT NOT NULL REFERENCES invoices(id) ON DELETE CASCADE,
-              description TEXT NOT NULL,
-              quantity DOUBLE PRECISION NOT NULL,
-              unit_price INTEGER NOT NULL,
-              discount_cents INTEGER NOT NULL DEFAULT 0,
-              discount_percent DOUBLE PRECISION,
-              line_total INTEGER NOT NULL
-            )
-            """,
-            """
-            CREATE TABLE IF NOT EXISTS tickets (
-              id TEXT PRIMARY KEY,
-              user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-              type TEXT NOT NULL,
-              status TEXT NOT NULL DEFAULT 'OPEN',
-              subject TEXT NOT NULL,
-              created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-              updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-            )
-            """,
-            """
-            CREATE TABLE IF NOT EXISTS ticket_messages (
-              id TEXT PRIMARY KEY,
-              ticket_id TEXT NOT NULL REFERENCES tickets(id) ON DELETE CASCADE,
-              sender TEXT NOT NULL,
-              body TEXT NOT NULL,
-              created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-            )
-            """,
-            """
-            CREATE TABLE IF NOT EXISTS payments (
-              id TEXT PRIMARY KEY,
-              user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-              stripe_session_id TEXT UNIQUE,
-              stripe_payment_id TEXT UNIQUE,
-              purchase_type TEXT NOT NULL,
-              amount_cents INTEGER NOT NULL,
-              credits_purchased INTEGER NOT NULL DEFAULT 0,
-              status TEXT NOT NULL DEFAULT 'PENDING',
-              created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-              updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-            )
-            """,
-        ]
+        required_columns = {
+            "users": {"id", "telegram_user_id", "invoice_count_this_month", "voice_transcriptions_this_month", "paid_invoice_credits", "paid_voice_credits"},
+            "profiles": {"id", "user_id", "address", "default_template_id", "next_invoice_number"},
+            "clients": {"id", "user_id", "name", "address"},
+            "invoice_drafts": {"id", "user_id", "client_id", "status", "subtotal_cents", "gst_cents", "total_cents"},
+            "invoice_draft_items": {"id", "draft_id", "description", "quantity", "unit_price", "discount_cents", "discount_percent", "line_total"},
+            "invoices": {"id", "user_id", "client_id", "profile_snapshot", "invoice_number", "template_id", "subtotal_cents", "gst_cents", "total_cents"},
+            "invoice_items": {"id", "invoice_id", "description", "quantity", "unit_price", "discount_cents", "discount_percent", "line_total"},
+            "tickets": {"id", "user_id", "type", "status", "subject"},
+            "ticket_messages": {"id", "ticket_id", "sender", "body"},
+            "payments": {"id", "user_id", "stripe_session_id", "stripe_payment_id", "purchase_type", "amount_cents", "credits_purchased", "status"},
+        }
         with self._connect() as conn, conn.cursor() as cur:
-            for statement in statements:
-                cur.execute(statement)
-            cur.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS voice_transcriptions_this_month INTEGER NOT NULL DEFAULT 0")
-            cur.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS paid_voice_credits INTEGER NOT NULL DEFAULT 0")
-            cur.execute("ALTER TABLE profiles ADD COLUMN IF NOT EXISTS address TEXT")
-            cur.execute("ALTER TABLE invoice_draft_items ADD COLUMN IF NOT EXISTS discount_cents INTEGER NOT NULL DEFAULT 0")
-            cur.execute("ALTER TABLE invoice_draft_items ADD COLUMN IF NOT EXISTS discount_percent DOUBLE PRECISION")
-            cur.execute("ALTER TABLE invoice_items ADD COLUMN IF NOT EXISTS discount_cents INTEGER NOT NULL DEFAULT 0")
-            cur.execute("ALTER TABLE invoice_items ADD COLUMN IF NOT EXISTS discount_percent DOUBLE PRECISION")
-            conn.commit()
+            cur.execute(
+                """
+                SELECT table_name, column_name
+                FROM information_schema.columns
+                WHERE table_schema = 'public'
+                """
+            )
+            rows = cur.fetchall()
+
+        columns_by_table: dict[str, set[str]] = {}
+        for row in rows:
+            columns_by_table.setdefault(row["table_name"], set()).add(row["column_name"])
+
+        missing_tables = sorted(table for table in required_columns if table not in columns_by_table)
+        missing_columns = {
+            table: sorted(expected - columns_by_table.get(table, set()))
+            for table, expected in required_columns.items()
+            if expected - columns_by_table.get(table, set())
+        }
+
+        if missing_tables or missing_columns:
+            details: list[str] = []
+            if missing_tables:
+                details.append("missing tables: " + ", ".join(missing_tables))
+            if missing_columns:
+                details.append(
+                    "missing columns: "
+                    + "; ".join(f"{table}({', '.join(columns)})" for table, columns in missing_columns.items())
+                )
+            raise RuntimeError(
+                "Database schema is not ready for InvoiceBot. "
+                "Run Prisma migrations first with `npm run prisma:deploy` from the repo root. "
+                + "Detected "
+                + " | ".join(details)
+            )
 
     def _ensure_user(self, user_id: str) -> dict:
         with self._connect() as conn, conn.cursor() as cur:

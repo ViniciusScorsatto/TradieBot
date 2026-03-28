@@ -4,26 +4,6 @@ import { randomUUID } from "crypto";
 import { prisma } from "../../../../lib/prisma";
 import { sendTelegramMessage } from "../../../../lib/telegram";
 
-async function ensureBillingSchema() {
-  await prisma.$executeRawUnsafe(
-    "ALTER TABLE users ADD COLUMN IF NOT EXISTS paid_voice_credits INTEGER NOT NULL DEFAULT 0"
-  );
-  await prisma.$executeRawUnsafe(`
-    CREATE TABLE IF NOT EXISTS payments (
-      id TEXT PRIMARY KEY,
-      user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-      stripe_session_id TEXT UNIQUE,
-      stripe_payment_id TEXT UNIQUE,
-      purchase_type TEXT NOT NULL,
-      amount_cents INTEGER NOT NULL,
-      credits_purchased INTEGER NOT NULL DEFAULT 0,
-      status TEXT NOT NULL DEFAULT 'PENDING',
-      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-    )
-  `);
-}
-
 async function ensureUser(telegramUserId: string, stripeCustomerId?: string | null) {
   const existing = await prisma.$queryRaw<{ id: string }[]>`
     SELECT id
@@ -61,7 +41,6 @@ async function fulfillCheckout(session: Stripe.Checkout.Session) {
     return { ok: true, action: "ignored" };
   }
 
-  await ensureBillingSchema();
   const userId = await ensureUser(
     String(telegramUserId),
     typeof session.customer === "string" ? session.customer : null

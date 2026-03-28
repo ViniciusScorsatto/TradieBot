@@ -144,7 +144,16 @@ Set these at the project level if multiple services need them:
 ## Notes
 
 - Railway scans root `.env.example` files and suggests variables for import, which is why the repository keeps a root example env file.
+- Prisma migrations are the source of truth for database structure. Do not add new tables or columns via runtime application code.
 - The dashboard service uses `preDeployCommand = "npm run prisma:deploy"` so schema migrations run before startup.
+- When you change the database schema:
+  1. update `/prisma/schema.prisma`
+  2. create a migration
+  3. deploy migrations before deploying bot code that depends on the new schema
+- On Railway, the safest order is:
+  1. deploy `invoicebot-dashboard` so `prisma:deploy` runs
+  2. deploy `invoicebot-bot`
+  3. deploy any other services that depend on the schema
 - The site and dashboard expose `/api/health` for Railway health checks.
 - The bot is a worker process, so it does not use an HTTP health check.
 - To lock the bot to approved testers, set `ALLOWED_TELEGRAM_USER_IDS` on the bot service as a comma-separated list like `123456789,987654321`. Leave it empty to keep the bot publicly accessible.

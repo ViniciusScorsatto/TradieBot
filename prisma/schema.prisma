@@ -7,182 +7,185 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-enum PlanTier {
-  FREE
-  PAID
-}
-
-enum DraftStatus {
-  ACTIVE
-  GENERATED
-  ABANDONED
-}
-
-enum TicketType {
-  BUG
-  CLAIM
-  IMPROVEMENT
-  IDEA
-}
-
-enum TicketStatus {
-  OPEN
-  IN_PROGRESS
-  CLOSED
-}
-
-enum PaymentStatus {
-  PENDING
-  SUCCEEDED
-  FAILED
-}
-
 model User {
-  id                      String         @id @default(cuid())
-  telegramUserId          String         @unique
-  telegramHandle          String?
-  firstName               String?
-  lastName                String?
-  planTier                PlanTier       @default(FREE)
-  stripeCustomerId        String?        @unique
-  invoiceCountThisMonth   Int            @default(0)
-  paidInvoiceCredits      Int            @default(0)
-  joinedAt                DateTime       @default(now())
-  updatedAt               DateTime       @updatedAt
-  profile                 Profile?
-  clients                 Client[]
-  invoiceDrafts           InvoiceDraft[]
-  invoices                Invoice[]
-  tickets                 Ticket[]
-  payments                Payment[]
+  id                           String        @id @default(cuid())
+  telegramUserId               String        @unique @map("telegram_user_id")
+  telegramHandle               String?       @map("telegram_handle")
+  firstName                    String?       @map("first_name")
+  lastName                     String?       @map("last_name")
+  planTier                     String        @default("FREE") @map("plan_tier")
+  stripeCustomerId             String?       @unique @map("stripe_customer_id")
+  invoiceCountThisMonth        Int           @default(0) @map("invoice_count_this_month")
+  voiceTranscriptionsThisMonth Int           @default(0) @map("voice_transcriptions_this_month")
+  paidInvoiceCredits           Int           @default(0) @map("paid_invoice_credits")
+  paidVoiceCredits             Int           @default(0) @map("paid_voice_credits")
+  joinedAt                     DateTime      @default(now()) @map("joined_at")
+  updatedAt                    DateTime      @updatedAt @map("updated_at")
+  profile                      Profile?
+  clients                      Client[]
+  invoiceDrafts                InvoiceDraft[]
+  invoices                     Invoice[]
+  tickets                      Ticket[]
+  payments                     Payment[]
+
+  @@map("users")
 }
 
 model Profile {
-  id                String    @id @default(cuid())
-  userId            String    @unique
-  companyName       String?
-  gstNumber         String?
+  id                String   @id @default(cuid())
+  userId            String   @unique @map("user_id")
+  companyName       String?  @map("company_name")
+  address           String?
+  gstNumber         String?  @map("gst_number")
   email             String?
   phone             String?
-  bankDetails       String?
-  logoUrl           String?
-  defaultTemplateId String    @default("classic-blue")
-  invoicePrefix     String    @default("INV")
-  nextInvoiceNumber Int       @default(1)
-  createdAt         DateTime  @default(now())
-  updatedAt         DateTime  @updatedAt
-  user              User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  bankDetails       String?  @map("bank_details")
+  logoUrl           String?  @map("logo_url")
+  defaultTemplateId String   @default("classic-blue") @map("default_template_id")
+  invoicePrefix     String   @default("INV") @map("invoice_prefix")
+  nextInvoiceNumber Int      @default(1) @map("next_invoice_number")
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("profiles")
 }
 
 model Client {
-  id          String   @id @default(cuid())
-  userId      String
-  name        String
-  company     String?
-  email       String?
-  phone       String?
-  address     String?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  invoices    Invoice[]
+  id        String        @id @default(cuid())
+  userId    String        @map("user_id")
+  name      String
+  company   String?
+  email     String?
+  phone     String?
+  address   String?
+  createdAt DateTime      @default(now()) @map("created_at")
+  updatedAt DateTime      @updatedAt @map("updated_at")
+  user      User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  invoices  Invoice[]
+  drafts    InvoiceDraft[]
+
+  @@map("clients")
 }
 
 model InvoiceDraft {
-  id              String        @id @default(cuid())
-  userId          String
-  clientId        String?
-  status          DraftStatus   @default(ACTIVE)
-  notes           String?
-  subtotalCents   Int           @default(0)
-  gstCents        Int           @default(0)
-  totalCents      Int           @default(0)
-  createdAt       DateTime      @default(now())
-  updatedAt       DateTime      @updatedAt
-  user            User          @relation(fields: [userId], references: [id], onDelete: Cascade)
-  items           InvoiceDraftItem[]
+  id            String            @id @default(cuid())
+  userId        String            @map("user_id")
+  clientId      String?           @map("client_id")
+  status        String            @default("ACTIVE")
+  notes         String?
+  subtotalCents Int               @default(0) @map("subtotal_cents")
+  gstCents      Int               @default(0) @map("gst_cents")
+  totalCents    Int               @default(0) @map("total_cents")
+  createdAt     DateTime          @default(now()) @map("created_at")
+  updatedAt     DateTime          @updatedAt @map("updated_at")
+  user          User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  client        Client?           @relation(fields: [clientId], references: [id])
+  items         InvoiceDraftItem[]
+
+  @@map("invoice_drafts")
 }
 
 model InvoiceDraftItem {
-  id          String       @id @default(cuid())
-  draftId     String
-  description String
-  quantity    Float        @default(1)
-  unitPrice   Int
-  lineTotal   Int
-  createdAt   DateTime     @default(now())
-  draft       InvoiceDraft @relation(fields: [draftId], references: [id], onDelete: Cascade)
+  id              String       @id @default(cuid())
+  draftId         String       @map("draft_id")
+  description     String
+  quantity        Float        @default(1)
+  unitPrice       Int          @map("unit_price")
+  discountCents   Int          @default(0) @map("discount_cents")
+  discountPercent Float?       @map("discount_percent")
+  lineTotal       Int          @map("line_total")
+  createdAt       DateTime     @default(now()) @map("created_at")
+  draft           InvoiceDraft @relation(fields: [draftId], references: [id], onDelete: Cascade)
+
+  @@map("invoice_draft_items")
 }
 
 model Invoice {
-  id              String        @id @default(cuid())
-  userId          String
-  clientId        String?
-  profileSnapshot Json
-  invoiceNumber   String
-  templateId      String
-  subtotalCents   Int
-  gstCents        Int
-  totalCents      Int
+  id              String      @id @default(cuid())
+  userId          String      @map("user_id")
+  clientId        String?     @map("client_id")
+  profileSnapshot Json        @map("profile_snapshot")
+  invoiceNumber   String      @map("invoice_number")
+  templateId      String      @map("template_id")
+  subtotalCents   Int         @map("subtotal_cents")
+  gstCents        Int         @map("gst_cents")
+  totalCents      Int         @map("total_cents")
   notes           String?
-  pdfUrl          String?
-  createdAt       DateTime      @default(now())
-  user            User          @relation(fields: [userId], references: [id], onDelete: Cascade)
-  client          Client?       @relation(fields: [clientId], references: [id])
+  pdfUrl          String?     @map("pdf_url")
+  createdAt       DateTime    @default(now()) @map("created_at")
+  user            User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  client          Client?     @relation(fields: [clientId], references: [id])
   items           InvoiceItem[]
+
+  @@map("invoices")
 }
 
 model InvoiceItem {
-  id          String   @id @default(cuid())
-  invoiceId   String
-  description String
-  quantity    Float
-  unitPrice   Int
-  lineTotal   Int
-  invoice     Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  id              String    @id @default(cuid())
+  invoiceId       String    @map("invoice_id")
+  description     String
+  quantity        Float
+  unitPrice       Int       @map("unit_price")
+  discountCents   Int       @default(0) @map("discount_cents")
+  discountPercent Float?    @map("discount_percent")
+  lineTotal       Int       @map("line_total")
+  invoice         Invoice   @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+
+  @@map("invoice_items")
 }
 
 model Ticket {
-  id          String       @id @default(cuid())
-  userId      String
-  type        TicketType
-  status      TicketStatus @default(OPEN)
-  subject     String
-  createdAt   DateTime     @default(now())
-  updatedAt   DateTime     @updatedAt
-  user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
-  messages    TicketMessage[]
+  id        String         @id @default(cuid())
+  userId    String         @map("user_id")
+  type      String
+  status    String         @default("OPEN")
+  subject   String
+  createdAt DateTime       @default(now()) @map("created_at")
+  updatedAt DateTime       @updatedAt @map("updated_at")
+  user      User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  messages  TicketMessage[]
+
+  @@map("tickets")
 }
 
 model TicketMessage {
-  id         String   @id @default(cuid())
-  ticketId    String
-  sender      String
-  body        String
-  createdAt   DateTime @default(now())
-  ticket      Ticket   @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  id        String   @id @default(cuid())
+  ticketId  String   @map("ticket_id")
+  sender    String
+  body      String
+  createdAt DateTime @default(now()) @map("created_at")
+  ticket    Ticket   @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+
+  @@map("ticket_messages")
 }
 
 model Payment {
-  id                String        @id @default(cuid())
-  userId            String
-  stripeSessionId   String?       @unique
-  stripePaymentId   String?       @unique
-  amountCents       Int
-  creditsPurchased  Int
-  status            PaymentStatus @default(PENDING)
-  createdAt         DateTime      @default(now())
-  user              User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id               String        @id @default(cuid())
+  userId           String        @map("user_id")
+  stripeSessionId  String?       @unique @map("stripe_session_id")
+  stripePaymentId  String?       @unique @map("stripe_payment_id")
+  purchaseType     String        @map("purchase_type")
+  amountCents      Int           @map("amount_cents")
+  creditsPurchased Int           @default(0) @map("credits_purchased")
+  status           String        @default("PENDING")
+  createdAt        DateTime      @default(now()) @map("created_at")
+  updatedAt        DateTime      @updatedAt @map("updated_at")
+  user             User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("payments")
 }
 
 model AdminUser {
-  id                String   @id @default(cuid())
-  email             String   @unique
-  passwordHash      String
-  totpSecret        String?
-  recoveryCodes     Json?
-  failedLoginCount  Int      @default(0)
-  lockedUntil       DateTime?
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
+  id               String    @id @default(cuid())
+  email            String    @unique
+  passwordHash     String    @map("password_hash")
+  totpSecret       String?   @map("totp_secret")
+  recoveryCodes    Json?     @map("recovery_codes")
+  failedLoginCount Int       @default(0) @map("failed_login_count")
+  lockedUntil      DateTime? @map("locked_until")
+  createdAt        DateTime  @default(now()) @map("created_at")
+  updatedAt        DateTime  @updatedAt @map("updated_at")
+
+  @@map("admin_users")
 }
