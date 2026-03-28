@@ -42,12 +42,12 @@ export default function HomePage() {
   return (
     <main className="container">
       <section className="hero">
-        <div>
-          <span className="eyebrow">Built for New Zealand small businesses and independent operators</span>
-          <h1>Turn work notes into polished invoices straight from Telegram.</h1>
+        <div className="heroCopy">
+          <span className="eyebrow">Telegram-first invoicing for New Zealand small businesses</span>
+          <h1>Turn chats, voice notes, and job details into invoices that look ready to send.</h1>
           <p>
-            InvoiceBot helps you speak or type what got done, review the totals, and send
-            a branded invoice PDF without waiting to get back to the office.
+            InvoiceBot lives where your work already happens. Capture what got done in Telegram,
+            review the totals, and send a polished invoice PDF without jumping between apps.
           </p>
           <div className="heroActions">
             <a
@@ -60,31 +60,88 @@ export default function HomePage() {
             </a>
             <a className="secondary" href="/pricing">See pricing</a>
           </div>
-        </div>
-        <aside className="heroCard">
-          <div className="heroFlow">
-            <div className="flowStep">
-              <strong>1. Send job details</strong>
-              <p>“Garden tidy x 2 at $95, green waste removal $48, callout $120.”</p>
+          <div className="heroStats">
+            <div className="heroStat">
+              <strong>Voice + text</strong>
+              <span>Capture invoices the way people actually work</span>
             </div>
-            <div className="flowStep">
-              <strong>2. Review and confirm</strong>
-              <p>InvoiceBot shows the itemised list, GST, and total before it generates anything.</p>
+            <div className="heroStat">
+              <strong>NZ GST ready</strong>
+              <span>Handles GST cleanly when your business profile needs it</span>
             </div>
-            <div className="flowStep">
-              <strong>3. Get the PDF back in chat</strong>
-              <p>Your business details, saved client, and default invoice template are applied automatically.</p>
+            <div className="heroStat">
+              <strong>PDF + email</strong>
+              <span>Send the invoice in chat or email it to the client</span>
             </div>
           </div>
+        </div>
+        <aside className="heroVisual">
+          <div className="heroGlow heroGlowOne" />
+          <div className="heroGlow heroGlowTwo" />
+          <div className="dashboardMock">
+            <div className="dashboardChrome">
+              <span />
+              <span />
+              <span />
+            </div>
+            <div className="dashboardBody">
+              <div className="dashboardKpis">
+                <div className="kpiCard">
+                  <span>Invoices sent</span>
+                  <strong>146</strong>
+                </div>
+                <div className="kpiCard">
+                  <span>Paid faster</span>
+                  <strong>+27%</strong>
+                </div>
+                <div className="kpiCard">
+                  <span>Voice used</span>
+                  <strong>84</strong>
+                </div>
+              </div>
+              <div className="dashboardChart">
+                <div className="chartLine" />
+              </div>
+              <div className="dashboardRows">
+                <div className="dashboardRow">
+                  <span>Client</span>
+                  <span>Ready</span>
+                </div>
+                <div className="dashboardRow">
+                  <span>Invoice</span>
+                  <span>Sent</span>
+                </div>
+                <div className="dashboardRow">
+                  <span>Email</span>
+                  <span>Delivered</span>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div className="phoneMock">
+            <div className="phoneTop" />
+            <div className="phoneScreen">
+              <div className="chatBubble inbound">
+                Garden tidy x 2 at $95
+                <br />
+                Green waste removal $48
+              </div>
+              <div className="chatBubble outbound">Invoice draft ready. Total: NZD 264.50</div>
+              <div className="chatBubble inbound compact">Send PDF</div>
+              <div className="chatBubble outbound compact">Email to client</div>
+            </div>
+          </div>
+          <div className="floatingBadge badgeTop">Telegram workflow</div>
+          <div className="floatingBadge badgeBottom">PDF + email in one flow</div>
         </aside>
       </section>
 
       <section className="section">
         <div className="sectionHead">
           <div>
-            <h2>Why small businesses buy it</h2>
+            <h2>Why teams move to this flow</h2>
             <p>
-              The pitch is simple: less admin drag, faster payment, and invoices that still look like they came from a proper system.
+              The pitch is simple: less admin drag, faster payment, and invoices that still look like they came from a real back-office system.
             </p>
           </div>
         </div>
@@ -103,7 +160,7 @@ export default function HomePage() {
           <div>
             <h2>Five templates, zero design stress</h2>
             <p>
-              Every customer gets access to all five layouts. They pick one once, save it to their profile, and reuse it on every invoice.
+              Every business gets access to all five layouts. Pick one once, save it to the profile, and keep the brand consistent every time.
             </p>
           </div>
         </div>
@@ -134,7 +191,7 @@ export default function HomePage() {
             </p>
           </article>
           <article className="priceCard">
-            <h3>What you get</h3>
+            <h3>Built for real operations</h3>
             <p>
               Voice or text invoice capture, saved clients, default template selection, branded PDF output,
               and support through Telegram, with premium voice capacity as usage grows.

@@ -6,9 +6,11 @@ export function Header() {
       <div className="container">
         <div className="nav">
           <Link className="brandmark" href="/">
-            InvoiceBot
+            <span className="brandmarkIcon">↗</span>
+            <span>InvoiceBot</span>
           </Link>
           <div className="navlinks">
+            <Link href="/">Home</Link>
             <Link href="/pricing">Pricing</Link>
             <Link href="/faq">FAQ</Link>
             <Link href="/contact">Contact</Link>
