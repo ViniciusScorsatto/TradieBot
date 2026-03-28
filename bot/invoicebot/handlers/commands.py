@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import base64
 from dataclasses import replace
+import base64
 from io import BytesIO
 from tempfile import NamedTemporaryFile
 import traceback
@@ -13,6 +14,7 @@ from PIL import Image
 from invoicebot.models import InvoiceItem, SupportTicket
 from invoicebot.services.billing import evaluate_quota
 from invoicebot.services.checkout import create_checkout_session
+from invoicebot.services.emailing import send_invoice_email
 from invoicebot.services.mock_data import seed_mock_clients
 from invoicebot.services.parser import parse_line_items
 from invoicebot.services.pdf import render_invoice_pdf
@@ -447,6 +449,12 @@ async def _send_draft_editor(message: Message | None, draft) -> None:
 
 def _invoice_limit_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup([[InlineKeyboardButton("Unlock 20 more invoices", callback_data="buy_invoice_credits")]])
+
+
+def _post_generate_keyboard(*, can_email: bool) -> InlineKeyboardMarkup | None:
+    if not can_email:
+        return None
+    return InlineKeyboardMarkup([[InlineKeyboardButton("Email to client", callback_data="email_last_invoice")]])
 
 
 async def _send_invoice_items_prompt(message: Message | None, prefix: str | None = None) -> None:
@@ -1576,12 +1584,65 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             return
         profile = repo.get_or_create_profile(user_id)
         client = repo.get_client(user_id, draft.client_id) if draft.client_id else None
+        invoice_number = f"{profile.invoice_prefix}-{profile.next_invoice_number:04d}"
         loading_message = await _send_temporary_status(query.message, "Generating invoice PDF...")
         try:
             pdf_bytes = render_invoice_pdf(profile, draft, client)
             repo.finalize_draft(user_id)
             repo.consume_paid_credit_if_needed(user_id, context.application.bot_data["settings"].free_invoice_limit)
             await query.edit_message_text("Invoice generated and sent below.")
-            await query.message.reply_document(document=pdf_bytes, filename="invoice.pdf")
+            filename = f"{invoice_number}.pdf"
+            await query.message.reply_document(document=pdf_bytes, filename=filename)
+            if client and client.email:
+                context.user_data["last_generated_invoice"] = {
+                    "pdf_base64": base64.b64encode(pdf_bytes).decode("ascii"),
+                    "client_email": client.email,
+                    "client_name": client.name,
+                    "invoice_number": invoice_number,
+                    "filename": filename,
+                    "reply_to": profile.email,
+                }
+                await query.message.reply_text(
+                    f"Next step: send {invoice_number} to {client.email}?",
+                    reply_markup=_post_generate_keyboard(can_email=True),
+                )
+            else:
+                await query.message.reply_text(
+                    "This invoice has been generated, but the selected client has no email saved yet. "
+                    "Add one in /clients if you want one-tap email sending."
+                )
+        finally:
+            await _clear_temporary_status(loading_message)
+        return
+
+    if query.data == "email_last_invoice":
+        last_invoice = context.user_data.get("last_generated_invoice")
+        settings = context.application.bot_data["settings"]
+        if not last_invoice:
+            await query.edit_message_text("I can't find a recent generated invoice to email. Generate the invoice again first.")
+            return
+        loading_message = await _send_temporary_status(query.message, "Sending invoice email...")
+        try:
+            await send_invoice_email(
+                resend_api_key=settings.resend_api_key,
+                email_from=settings.email_from,
+                to_email=last_invoice["client_email"],
+                subject=f"Invoice {last_invoice['invoice_number']}",
+                body_text=(
+                    f"Hi {last_invoice['client_name']},\n\n"
+                    f"Please find attached invoice {last_invoice['invoice_number']}.\n\n"
+                    "Thank you."
+                ),
+                pdf_bytes=base64.b64decode(last_invoice["pdf_base64"]),
+                filename=last_invoice["filename"],
+                reply_to=last_invoice.get("reply_to") or None,
+            )
+            await query.edit_message_text(f"Invoice emailed to {last_invoice['client_email']}.")
+        except ValueError as exc:
+            await query.edit_message_text(f"Email sending is not fully configured yet: {exc}")
+        except Exception:
+            print("Invoice email failed:")
+            print(traceback.format_exc())
+            await query.edit_message_text("I couldn't send that invoice email right now. Please try again in a moment.")
         finally:
             await _clear_temporary_status(loading_message)
