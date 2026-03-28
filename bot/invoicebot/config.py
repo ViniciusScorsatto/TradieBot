@@ -13,7 +13,9 @@ class Settings:
     stripe_invoice_price_id: str
     stripe_voice_price_id: str
     marketing_site_url: str
+    environment: str
     allowed_telegram_user_ids: tuple[str, ...]
+    admin_telegram_user_ids: tuple[str, ...]
     warning_threshold: int = 8
     free_invoice_limit: int = 10
     paid_invoice_block: int = 20
@@ -31,9 +33,15 @@ class Settings:
             stripe_invoice_price_id=os.getenv("STRIPE_INVOICE_PRICE_ID", ""),
             stripe_voice_price_id=os.getenv("STRIPE_VOICE_PRICE_ID", ""),
             marketing_site_url=os.getenv("MARKETING_SITE_URL", ""),
+            environment=os.getenv("APP_ENV", "production").strip().lower() or "production",
             allowed_telegram_user_ids=tuple(
                 value.strip()
                 for value in os.getenv("ALLOWED_TELEGRAM_USER_IDS", "").split(",")
+                if value.strip()
+            ),
+            admin_telegram_user_ids=tuple(
+                value.strip()
+                for value in os.getenv("ADMIN_TELEGRAM_USER_IDS", "").split(",")
                 if value.strip()
             ),
             warning_threshold=int(os.getenv("WARNING_THRESHOLD", "8")),

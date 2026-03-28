@@ -76,7 +76,9 @@ Set these at the project level if multiple services need them:
 - `STRIPE_INVOICE_PRICE_ID`
 - `STRIPE_VOICE_PRICE_ID`
 - `MARKETING_SITE_URL`
+- `APP_ENV`
 - `ALLOWED_TELEGRAM_USER_IDS`
+- `ADMIN_TELEGRAM_USER_IDS`
 - `WARNING_THRESHOLD`
 - `FREE_INVOICE_LIMIT`
 - `PAID_INVOICE_BLOCK`
@@ -98,7 +100,9 @@ Set these at the project level if multiple services need them:
 - `STRIPE_INVOICE_PRICE_ID`
 - `STRIPE_VOICE_PRICE_ID`
 - `MARKETING_SITE_URL`
+- `APP_ENV`
 - `ALLOWED_TELEGRAM_USER_IDS`
+- `ADMIN_TELEGRAM_USER_IDS`
 - `WARNING_THRESHOLD`
 - `FREE_INVOICE_LIMIT`
 - `PAID_INVOICE_BLOCK`
@@ -138,3 +142,5 @@ Set these at the project level if multiple services need them:
 - The site and dashboard expose `/api/health` for Railway health checks.
 - The bot is a worker process, so it does not use an HTTP health check.
 - To lock the bot to approved testers, set `ALLOWED_TELEGRAM_USER_IDS` on the bot service as a comma-separated list like `123456789,987654321`. Leave it empty to keep the bot publicly accessible.
+- To grant Telegram admin privileges, set `ADMIN_TELEGRAM_USER_IDS` on the bot service as a comma-separated list like `123456789`.
+- Set `APP_ENV=staging` on your staging bot and `APP_ENV=production` on production. The `/mockclients` command is automatically blocked in production.

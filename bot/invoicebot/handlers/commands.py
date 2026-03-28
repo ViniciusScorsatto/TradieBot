@@ -10,6 +10,7 @@ from telegram.ext import ContextTypes
 from invoicebot.models import SupportTicket
 from invoicebot.services.billing import evaluate_quota
 from invoicebot.services.checkout import create_checkout_session
+from invoicebot.services.mock_data import seed_mock_clients
 from invoicebot.services.parser import parse_line_items
 from invoicebot.services.pdf import render_invoice_pdf
 from invoicebot.services.storage import Repository
@@ -52,6 +53,11 @@ def _is_user_allowed(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bool
     return _user_key(update) in allowed_ids
 
 
+def _is_admin_user(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bool:
+    admin_ids = context.application.bot_data["settings"].admin_telegram_user_ids
+    return bool(admin_ids) and _user_key(update) in admin_ids
+
+
 async def _deny_access(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     target_message = update.callback_query.message if update.callback_query else update.message
     if not target_message:
@@ -60,6 +66,13 @@ async def _deny_access(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         "This bot is currently locked to approved testers only.\n\n"
         "If you should have access, please contact the owner for beta access."
     )
+
+
+async def _deny_admin(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    target_message = update.callback_query.message if update.callback_query else update.message
+    if not target_message:
+        return
+    await target_message.reply_text("This command is only available to configured bot admins.")
 
 
 async def _validate_text_length(message: Message | None, label: str, value: str) -> bool:
@@ -282,6 +295,30 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         "InvoiceBot helps tradies create invoices from voice or text in Telegram.\n\n"
         "Use /profile to set up your business, /template to pick a layout, and /invoice to start a draft."
     )
+
+
+async def myid_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if not update.message:
+        return
+    await update.message.reply_text(f"Your Telegram user ID is `{_user_key(update)}`.", parse_mode="Markdown")
+
+
+async def mockclients_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if not _is_user_allowed(update, context):
+        await _deny_access(update, context)
+        return
+    if not _is_admin_user(update, context):
+        await _deny_admin(update, context)
+        return
+
+    settings = context.application.bot_data["settings"]
+    if settings.environment == "production":
+        await update.message.reply_text("Mock client seeding is disabled in production.")
+        return
+
+    repo = _repo(context)
+    created = seed_mock_clients(repo, _user_key(update), count=50)
+    await update.message.reply_text(f"Created {created} mock clients for this staging account.")
 
 
 async def invoice_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:

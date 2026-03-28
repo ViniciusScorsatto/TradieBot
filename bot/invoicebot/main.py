@@ -12,6 +12,8 @@ from invoicebot.handlers.commands import (
     handle_message,
     history_command,
     invoice_command,
+    mockclients_command,
+    myid_command,
     new_client_command,
     profile_command,
     repeat_command,
@@ -32,6 +34,8 @@ def build_application() -> Application:
     application.bot_data["repo"] = PostgresRepository(settings.database_url) if settings.database_url else InMemoryRepository()
 
     application.add_handler(CommandHandler("start", start_command))
+    application.add_handler(CommandHandler("myid", myid_command))
+    application.add_handler(CommandHandler("mockclients", mockclients_command))
     application.add_handler(CommandHandler("invoice", invoice_command))
     application.add_handler(CommandHandler("generate", generate_command))
     application.add_handler(CommandHandler("profile", profile_command))
