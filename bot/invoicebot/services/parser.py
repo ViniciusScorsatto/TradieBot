@@ -60,6 +60,11 @@ PRICE_ONLY_RE = re.compile(
     re.IGNORECASE,
 )
 
+PRICE_COMMA_RE = re.compile(
+    r"^\s*(?P<description>.+?)\s*,\s*\$?(?P<price>\d+(?:\.\d{1,2})?)\s*$",
+    re.IGNORECASE,
+)
+
 
 def _normalize_spoken_numbers(text: str) -> str:
     normalized = text
@@ -110,7 +115,7 @@ def parse_line_items(text: str) -> list[InvoiceItem]:
                 )
                 break
         else:
-            match = PRICE_ONLY_RE.match(normalized)
+            match = PRICE_ONLY_RE.match(normalized) or PRICE_COMMA_RE.match(normalized)
             if match:
                 items.append(
                     _build_item(
