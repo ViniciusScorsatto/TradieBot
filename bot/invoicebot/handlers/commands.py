@@ -218,6 +218,18 @@ def _voice_limit_keyboard(settings) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(rows)
 
 
+def _voice_retry_keyboard(*, show_examples: bool = False) -> InlineKeyboardMarkup:
+    rows: list[list[InlineKeyboardButton]] = [
+        [
+            InlineKeyboardButton("Try voice again", callback_data="voice_retry_prompt"),
+            InlineKeyboardButton("Keep with text", callback_data="voice_continue_text"),
+        ]
+    ]
+    if show_examples:
+        rows.append([InlineKeyboardButton("Show voice examples", callback_data="voice_examples")])
+    return InlineKeyboardMarkup(rows)
+
+
 def _format_minutes_from_seconds(seconds: int) -> str:
     minutes = max(seconds, 0) / 60
     if minutes.is_integer():
@@ -1368,7 +1380,11 @@ async def _handle_voice_message(update: Update, context: ContextTypes.DEFAULT_TY
             await telegram_file.download_to_drive(custom_path=temp_file.name)
             transcript = await transcribe_audio_file(temp_file.name, settings.openai_api_key)
         except Exception:
-            await message.reply_text("I couldn't transcribe that voice note. Please try again or type the items manually.")
+            await message.reply_text(
+                "I couldn't transcribe that voice note.\n\n"
+                "You are still in the same invoice draft. Send another voice note now, or switch to text for this item.",
+                reply_markup=_voice_retry_keyboard(),
+            )
             return
         finally:
             await _clear_temporary_status(loading_message)
@@ -1400,12 +1416,9 @@ async def _handle_voice_message(update: Update, context: ContextTypes.DEFAULT_TY
         await message.reply_text(
             "I transcribed the voice note, but couldn't turn it into invoice line items.\n\n"
             f"Transcript:\n{transcript}\n\n"
-            "You are still in the same invoice draft. Send another voice note or type the item manually.\n\n"
-            "Try phrases like:\n"
-            "`Garden tidy x 2 at $95`\n"
-            "`Garden tidy twice at $95`\n"
-            "`Cleaning supplies $45`",
+            "You are still in the same invoice draft. Send another voice note or type the item manually.",
             parse_mode="Markdown",
+            reply_markup=_voice_retry_keyboard(show_examples=True),
         )
 
 
@@ -1755,6 +1768,23 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             "Send line items like:\n"
             "Garden tidy x 2 at $95\n"
             "Cleaning supplies $45"
+        )
+        return
+
+    if query.data == "voice_retry_prompt":
+        await query.edit_message_text(
+            "You can retry voice right now.\n\n"
+            "Send another voice note in this same invoice draft, or switch to text if it’s quicker."
+        )
+        return
+
+    if query.data == "voice_examples":
+        await query.edit_message_text(
+            "Try phrases like:\n"
+            "Garden tidy x 2 at $95\n"
+            "Garden tidy twice at $95\n"
+            "Cleaning supplies $45\n"
+            "Wood 50, Service 100, Materials 45"
         )
         return
 
