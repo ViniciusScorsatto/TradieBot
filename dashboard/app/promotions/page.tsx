@@ -69,6 +69,14 @@ async function loadRecentCampaigns(): Promise<CampaignRow[]> {
 async function sendPromotionCampaign(formData: FormData) {
   "use server";
 
+  const promotionsEnabled =
+    (process.env.ENABLE_PROMOTIONS ?? "false").trim().toLowerCase() === "true" ||
+    (process.env.ENABLE_PROMOTIONS ?? "").trim() === "1";
+
+  if (!promotionsEnabled) {
+    redirect("/promotions?message=Promotions are disabled for this launch.");
+  }
+
   const category = String(formData.get("category") ?? "");
   const title = String(formData.get("title") ?? "").trim();
   const body = String(formData.get("body") ?? "").trim();
@@ -171,6 +179,9 @@ export default async function PromotionsPage({
 }: {
   searchParams?: { message?: string };
 }) {
+  const promotionsEnabled =
+    (process.env.ENABLE_PROMOTIONS ?? "false").trim().toLowerCase() === "true" ||
+    (process.env.ENABLE_PROMOTIONS ?? "").trim() === "1";
   const message = searchParams?.message;
   const counts = await loadPreferenceCounts();
   const recentCampaigns = await loadRecentCampaigns();
@@ -185,6 +196,12 @@ export default async function PromotionsPage({
           Every campaign includes a one-tap unsubscribe action.
         </p>
       </section>
+
+      {!promotionsEnabled ? (
+        <section className="notice">
+          Promotions are currently disabled for this launch. The page remains available for review, but sending campaigns is turned off.
+        </section>
+      ) : null}
 
       {message ? (
         <section className="notice success-notice">
@@ -228,7 +245,10 @@ export default async function PromotionsPage({
               required
             />
             <input className="input" name="affiliateUrl" type="url" placeholder="https://affiliate-link.example" required />
-            <ActionButton label="Send promotion" />
+            <ActionButton
+              label={promotionsEnabled ? "Send promotion" : "Promotions disabled"}
+              disabled={!promotionsEnabled}
+            />
           </form>
         </article>
 

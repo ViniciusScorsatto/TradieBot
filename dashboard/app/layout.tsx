@@ -8,10 +8,14 @@ export const metadata: Metadata = {
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
+  const promotionsEnabled =
+    (process.env.ENABLE_PROMOTIONS ?? "false").trim().toLowerCase() === "true" ||
+    (process.env.ENABLE_PROMOTIONS ?? "").trim() === "1";
+
   return (
     <html lang="en">
       <body>
-        <ShellFrame>{children}</ShellFrame>
+        <ShellFrame promotionsEnabled={promotionsEnabled}>{children}</ShellFrame>
       </body>
     </html>
   );

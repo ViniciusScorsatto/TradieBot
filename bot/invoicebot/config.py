@@ -20,6 +20,7 @@ class Settings:
     stripe_voice_price_id: str
     marketing_site_url: str
     environment: str
+    promotions_enabled: bool
     allowed_telegram_user_ids: tuple[str, ...]
     admin_telegram_user_ids: tuple[str, ...]
     warning_threshold: int = 8
@@ -32,6 +33,7 @@ class Settings:
 
     @classmethod
     def from_env(cls) -> "Settings":
+        promotions_raw = os.getenv("ENABLE_PROMOTIONS", "false").strip().lower()
         return cls(
             telegram_token=os.getenv("TELEGRAM_TOKEN", ""),
             database_url=os.getenv("DATABASE_URL", ""),
@@ -47,6 +49,7 @@ class Settings:
             stripe_voice_price_id=os.getenv("STRIPE_VOICE_PRICE_ID", ""),
             marketing_site_url=os.getenv("MARKETING_SITE_URL", ""),
             environment=os.getenv("APP_ENV", "production").strip().lower() or "production",
+            promotions_enabled=promotions_raw in {"1", "true", "yes", "on"},
             allowed_telegram_user_ids=tuple(
                 value.strip()
                 for value in os.getenv("ALLOWED_TELEGRAM_USER_IDS", "").split(",")

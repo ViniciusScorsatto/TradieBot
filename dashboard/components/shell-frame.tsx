@@ -4,7 +4,13 @@ import { usePathname } from "next/navigation";
 import { Sidebar } from "./sidebar";
 import { Topbar } from "./topbar";
 
-export function ShellFrame({ children }: { children: React.ReactNode }) {
+export function ShellFrame({
+  children,
+  promotionsEnabled,
+}: {
+  children: React.ReactNode;
+  promotionsEnabled: boolean;
+}) {
   const pathname = usePathname();
 
   if (pathname === "/login") {
@@ -13,7 +19,7 @@ export function ShellFrame({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="shell">
-      <Sidebar />
+      <Sidebar promotionsEnabled={promotionsEnabled} />
       <div className="workspace">
         <Topbar />
         <main className="main">{children}</main>

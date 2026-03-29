@@ -716,10 +716,12 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     if not _is_user_allowed(update, context):
         await _deny_access(update, context)
         return
+    settings = context.application.bot_data["settings"]
+    promo_line = ", /promotions to control affiliate offers" if settings.promotions_enabled else ""
     await update.message.reply_text(
         f"{DEVELOPMENT_NOTICE}\n\n"
         "InvoiceBot helps small businesses and independent operators create invoices from voice or text in Telegram.\n\n"
-        "Use /profile to set up your business, /template to pick a layout, /invoice to start a draft, and /promotions to control affiliate offers."
+        f"Use /profile to set up your business, /template to pick a layout, /invoice to start a draft{promo_line}."
     )
 
 
@@ -953,6 +955,11 @@ async def support_command(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 async def promotions_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if not _is_user_allowed(update, context):
         await _deny_access(update, context)
+        return
+    if not context.application.bot_data["settings"].promotions_enabled:
+        await update.message.reply_text(
+            "Promotions are currently turned off for this launch, so affiliate preference controls are not available right now."
+        )
         return
     await _send_promotion_preferences(update.message, context, _user_key(update))
 
@@ -1532,6 +1539,9 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         return
 
     if query.data.startswith("promo_pref_toggle:"):
+        if not context.application.bot_data["settings"].promotions_enabled:
+            await query.edit_message_text("Promotions are currently turned off for this launch.")
+            return
         category_id = query.data.split(":", 1)[1]
         valid_category_ids = {item_id for item_id, _ in PROMOTION_CATEGORIES}
         if category_id not in valid_category_ids:
@@ -1556,12 +1566,18 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         return
 
     if query.data == "promo_pref_clear":
+        if not context.application.bot_data["settings"].promotions_enabled:
+            await query.edit_message_text("Promotions are currently turned off for this launch.")
+            return
         repo.save_promotion_preferences(user_id, [])
         await query.edit_message_text("Cleared your promotion categories. You will not receive category-based offers unless you turn some back on.")
         await _send_promotion_preferences(query.message, context, user_id)
         return
 
     if query.data == "promo_consent_enable":
+        if not context.application.bot_data["settings"].promotions_enabled:
+            await query.edit_message_text("Promotions are currently turned off for this launch.")
+            return
         repo.grant_promotion_consent(user_id, source="telegram_bot")
         await query.edit_message_text(
             "You are now opted into optional Telegram promotions.\n\nChoose the promo types you want to receive."

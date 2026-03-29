@@ -8,13 +8,13 @@ const links = [
   { href: "/users", label: "Users" },
   { href: "/invoices", label: "Invoices" },
   { href: "/billing", label: "Billing" },
-  { href: "/promotions", label: "Promotions" },
   { href: "/tickets", label: "Tickets" },
   { href: "/login", label: "Admin Login" }
 ] as const;
 
-export function Sidebar() {
+export function Sidebar({ promotionsEnabled }: { promotionsEnabled: boolean }) {
   const pathname = usePathname();
+  const visibleLinks = promotionsEnabled ? links : links.filter((link) => link.href !== "/promotions");
 
   return (
     <aside className="sidebar">
@@ -31,7 +31,7 @@ export function Sidebar() {
         <p>Run the product from one internal dashboard.</p>
       </div>
       <nav className="nav">
-        {links.map((link) => (
+        {visibleLinks.map((link) => (
           <Link
             key={link.href}
             href={link.href}

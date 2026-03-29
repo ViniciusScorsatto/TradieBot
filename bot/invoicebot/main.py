@@ -29,23 +29,27 @@ from invoicebot.services.storage import InMemoryRepository, PostgresRepository
 logging.basicConfig(level=logging.INFO)
 
 
-BOT_COMMANDS = [
-    BotCommand("start", "Start InvoiceBot"),
-    BotCommand("invoice", "Start a new invoice"),
-    BotCommand("generate", "Generate the invoice PDF"),
-    BotCommand("profile", "Set up your business details"),
-    BotCommand("template", "Choose your invoice template"),
-    BotCommand("newclient", "Add a new client"),
-    BotCommand("clients", "View or edit saved clients"),
-    BotCommand("history", "View recent invoices"),
-    BotCommand("repeat", "Repeat your latest invoice"),
-    BotCommand("support", "Send a bug or improvement ticket"),
-    BotCommand("promotions", "Choose affiliate promo preferences"),
-]
+def _bot_commands(settings: Settings) -> list[BotCommand]:
+    commands = [
+        BotCommand("start", "Start InvoiceBot"),
+        BotCommand("invoice", "Start a new invoice"),
+        BotCommand("generate", "Generate the invoice PDF"),
+        BotCommand("profile", "Set up your business details"),
+        BotCommand("template", "Choose your invoice template"),
+        BotCommand("newclient", "Add a new client"),
+        BotCommand("clients", "View or edit saved clients"),
+        BotCommand("history", "View recent invoices"),
+        BotCommand("repeat", "Repeat your latest invoice"),
+        BotCommand("support", "Send a bug or improvement ticket"),
+    ]
+    if settings.promotions_enabled:
+        commands.append(BotCommand("promotions", "Choose affiliate promo preferences"))
+    return commands
 
 
 async def _post_init(application: Application) -> None:
-    await application.bot.set_my_commands(BOT_COMMANDS)
+    settings: Settings = application.bot_data["settings"]
+    await application.bot.set_my_commands(_bot_commands(settings))
 
 
 def build_application() -> Application:
