@@ -766,7 +766,7 @@ def _payment_details_prompt(profile) -> str:
         profile,
         "bank_details",
         "payment details",
-        "Now send your payment details, like bank account name, account number, or a short payment note that should appear on the invoice",
+        "Now send your payment details. For example: `Bank: Your Bank, Account Name: Your Business, Account: 00-0000-0000000-00`",
     )
 
 
