@@ -26,11 +26,14 @@ async function loadPreferenceCounts(): Promise<PreferenceCountRow[]> {
   try {
     return await prisma.$queryRaw<PreferenceCountRow[]>`
       SELECT
-        category,
+        pref.category AS category,
         COUNT(*)::int AS "subscriberCount"
-      FROM promotion_preferences
-      GROUP BY category
-      ORDER BY category ASC
+      FROM promotion_preferences pref
+      JOIN users u ON u.id = pref.user_id
+      WHERE u.promotion_consent_at IS NOT NULL
+        AND u.promotion_opt_out_at IS NULL
+      GROUP BY pref.category
+      ORDER BY pref.category ASC
     `;
   } catch {
     return [];
@@ -83,6 +86,8 @@ async function sendPromotionCampaign(formData: FormData) {
     FROM promotion_preferences pref
     JOIN users u ON u.id = pref.user_id
     WHERE pref.category = ${category}
+      AND u.promotion_consent_at IS NOT NULL
+      AND u.promotion_opt_out_at IS NULL
     ORDER BY u.joined_at ASC
   `;
 
@@ -116,10 +121,12 @@ async function sendPromotionCampaign(formData: FormData) {
   for (const recipient of recipients) {
     const delivered = await sendTelegramMessage(
       recipient.telegramUserId,
-      `${title}\n\n${body}`,
+      `${title}\n\n${body}\n\nYou are receiving this because you opted into ${validCategory.label.toLowerCase()} promotions in Telegram. You can unsubscribe at any time.`,
       {
         buttonText: "Open offer",
-        buttonUrl: affiliateUrl
+        buttonUrl: affiliateUrl,
+        secondaryButtonText: "Unsubscribe",
+        secondaryButtonCallbackData: "promo_unsubscribe_all",
       }
     );
 
@@ -174,8 +181,8 @@ export default async function PromotionsPage({
       <section className="hero-card">
         <h2>Affiliate promotions</h2>
         <p>
-          Send targeted affiliate offers only to users who opted into those promo types inside the bot.
-          This keeps the experience relevant and gives you a clean category-based campaign workflow.
+          Send targeted affiliate offers only to users who explicitly consented to Telegram promotions and opted into those promo types inside the bot.
+          Every campaign includes a one-tap unsubscribe action.
         </p>
       </section>
 
@@ -199,7 +206,7 @@ export default async function PromotionsPage({
           <h3>Send a promotion</h3>
           <p>
             Users control these preferences inside Telegram with <code>/promotions</code>. Pick a category
-            and only matching subscribers will receive the affiliate offer.
+            and only consented users who opted into that category will receive the affiliate offer.
           </p>
 
           <form action={sendPromotionCampaign} className="form">

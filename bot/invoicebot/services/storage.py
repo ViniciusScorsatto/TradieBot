@@ -35,6 +35,9 @@ class Repository(Protocol):
     def bug_ai_assists_today(self, user_id: str) -> int: ...
     def list_promotion_preferences(self, user_id: str) -> list[str]: ...
     def save_promotion_preferences(self, user_id: str, categories: list[str]) -> None: ...
+    def promotion_consent_state(self, user_id: str) -> dict[str, bool]: ...
+    def grant_promotion_consent(self, user_id: str, *, source: str) -> None: ...
+    def revoke_promotion_consent(self, user_id: str) -> None: ...
     def invoice_count_this_month(self, user_id: str) -> int: ...
     def paid_credits(self, user_id: str) -> int: ...
     def paid_voice_seconds(self, user_id: str) -> int: ...
@@ -64,6 +67,8 @@ class InMemoryRepository:
         self.ticket_ai_sent_at: dict[str, datetime] = {}
         self.ticket_index: dict[str, SupportTicket] = {}
         self.promotion_preferences: DefaultDict[str, set[str]] = defaultdict(set)
+        self.promotion_consent: dict[str, bool] = {}
+        self.promotion_opt_out: dict[str, bool] = {}
 
     def get_or_create_profile(self, user_id: str) -> Profile:
         profile = self.profiles.get(user_id)
@@ -162,6 +167,21 @@ class InMemoryRepository:
     def save_promotion_preferences(self, user_id: str, categories: list[str]) -> None:
         self.promotion_preferences[user_id] = set(categories)
 
+    def promotion_consent_state(self, user_id: str) -> dict[str, bool]:
+        return {
+            "consented": self.promotion_consent.get(user_id, False),
+            "opted_out": self.promotion_opt_out.get(user_id, False),
+        }
+
+    def grant_promotion_consent(self, user_id: str, *, source: str) -> None:
+        self.promotion_consent[user_id] = True
+        self.promotion_opt_out[user_id] = False
+
+    def revoke_promotion_consent(self, user_id: str) -> None:
+        self.promotion_consent[user_id] = False
+        self.promotion_opt_out[user_id] = True
+        self.promotion_preferences[user_id] = set()
+
     def invoice_count_this_month(self, user_id: str) -> int:
         return self.invoice_counts[user_id]
 
@@ -209,7 +229,7 @@ class PostgresRepository:
 
     def ensure_schema(self) -> None:
         required_columns = {
-            "users": {"id", "telegram_user_id", "invoice_count_this_month", "voice_seconds_this_month", "paid_invoice_credits", "paid_voice_seconds"},
+            "users": {"id", "telegram_user_id", "invoice_count_this_month", "voice_seconds_this_month", "paid_invoice_credits", "paid_voice_seconds", "promotion_consent_at", "promotion_consent_source", "promotion_opt_out_at"},
             "profiles": {"id", "user_id", "address", "default_template_id", "next_invoice_number"},
             "clients": {"id", "user_id", "name", "address"},
             "invoice_drafts": {"id", "user_id", "client_id", "status", "subtotal_cents", "gst_cents", "total_cents"},
@@ -847,6 +867,54 @@ class PostgresRepository:
                     """,
                     (str(uuid4()), user["id"], category),
                 )
+            conn.commit()
+
+    def promotion_consent_state(self, user_id: str) -> dict[str, bool]:
+        user = self._ensure_user(user_id)
+        with self._connect() as conn, conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT promotion_consent_at, promotion_opt_out_at
+                FROM users
+                WHERE id = %s
+                """,
+                (user["id"],),
+            )
+            row = cur.fetchone() or {}
+            return {
+                "consented": row.get("promotion_consent_at") is not None,
+                "opted_out": row.get("promotion_opt_out_at") is not None,
+            }
+
+    def grant_promotion_consent(self, user_id: str, *, source: str) -> None:
+        user = self._ensure_user(user_id)
+        with self._connect() as conn, conn.cursor() as cur:
+            cur.execute(
+                """
+                UPDATE users
+                SET promotion_consent_at = COALESCE(promotion_consent_at, NOW()),
+                    promotion_consent_source = %s,
+                    promotion_opt_out_at = NULL,
+                    updated_at = NOW()
+                WHERE id = %s
+                """,
+                (source, user["id"]),
+            )
+            conn.commit()
+
+    def revoke_promotion_consent(self, user_id: str) -> None:
+        user = self._ensure_user(user_id)
+        with self._connect() as conn, conn.cursor() as cur:
+            cur.execute(
+                """
+                UPDATE users
+                SET promotion_opt_out_at = NOW(),
+                    updated_at = NOW()
+                WHERE id = %s
+                """,
+                (user["id"],),
+            )
+            cur.execute("DELETE FROM promotion_preferences WHERE user_id = %s", (user["id"],))
             conn.commit()
 
     def invoice_count_this_month(self, user_id: str) -> int:

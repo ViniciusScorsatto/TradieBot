@@ -19,6 +19,9 @@ model User {
   voiceSecondsThisMonth        Int           @default(0) @map("voice_seconds_this_month")
   paidInvoiceCredits           Int           @default(0) @map("paid_invoice_credits")
   paidVoiceSeconds             Int           @default(0) @map("paid_voice_seconds")
+  promotionConsentAt           DateTime?     @map("promotion_consent_at")
+  promotionConsentSource       String?       @map("promotion_consent_source")
+  promotionOptOutAt            DateTime?     @map("promotion_opt_out_at")
   joinedAt                     DateTime      @default(now()) @map("joined_at")
   updatedAt                    DateTime      @updatedAt @map("updated_at")
   profile                      Profile?

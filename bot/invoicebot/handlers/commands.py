@@ -279,18 +279,40 @@ def _promotion_preferences_keyboard(selected: list[str]) -> InlineKeyboardMarkup
             )
         rows.append(row)
     rows.append([InlineKeyboardButton("Turn all off", callback_data="promo_pref_clear")])
+    rows.append([InlineKeyboardButton("Unsubscribe all promotions", callback_data="promo_unsubscribe_all")])
+    return InlineKeyboardMarkup(rows)
+
+
+def _promotion_consent_keyboard(*, opted_out: bool) -> InlineKeyboardMarkup:
+    primary_label = "Re-enable promotions" if opted_out else "I agree"
+    primary_callback = "promo_consent_enable"
+    rows = [[InlineKeyboardButton(primary_label, callback_data=primary_callback)]]
+    if not opted_out:
+        rows.append([InlineKeyboardButton("Not now", callback_data="promo_consent_decline")])
     return InlineKeyboardMarkup(rows)
 
 
 async def _send_promotion_preferences(message: Message | None, context: ContextTypes.DEFAULT_TYPE, user_id: str, *, prefix: str | None = None) -> None:
     if not message:
         return
+    consent = _repo(context).promotion_consent_state(user_id)
+    lead = f"{prefix}\n\n" if prefix else ""
+    if not consent["consented"] or consent["opted_out"]:
+        await message.reply_text(
+            lead
+            + "Promotions are optional.\n\n"
+            + "If you opt in, we may send occasional affiliate offers in Telegram based on the promo types you choose. "
+            + "You can unsubscribe at any time with one tap.\n\n"
+            + ("You are currently unsubscribed from all promotions." if consent["opted_out"] else "You have not opted into promotions yet."),
+            reply_markup=_promotion_consent_keyboard(opted_out=consent["opted_out"]),
+        )
+        return
     selected = _repo(context).list_promotion_preferences(user_id)
     selected_labels = ", ".join(_promotion_label(category) for category in selected) if selected else "No promo categories selected"
-    lead = f"{prefix}\n\n" if prefix else ""
     await message.reply_text(
         lead
-        + "Choose the kinds of affiliate offers you'd like to receive in Telegram.\n\n"
+        + "You are subscribed to optional Telegram promotions.\n\n"
+        + "Choose the kinds of affiliate offers you'd like to receive in Telegram. You can turn categories off at any time or unsubscribe from all promotions below.\n\n"
         + f"Current preferences: {selected_labels}",
         reply_markup=_promotion_preferences_keyboard(selected),
     )
@@ -1515,6 +1537,11 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         if category_id not in valid_category_ids:
             await query.edit_message_text("That promotion category is no longer available.")
             return
+        consent = repo.promotion_consent_state(user_id)
+        if not consent["consented"] or consent["opted_out"]:
+            await query.edit_message_text("Please opt into promotions first.")
+            await _send_promotion_preferences(query.message, context, user_id)
+            return
         selected = repo.list_promotion_preferences(user_id)
         selected_set = set(selected)
         if category_id in selected_set:
@@ -1530,7 +1557,29 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 
     if query.data == "promo_pref_clear":
         repo.save_promotion_preferences(user_id, [])
-        await query.edit_message_text("Turned off affiliate promotions for this account.")
+        await query.edit_message_text("Cleared your promotion categories. You will not receive category-based offers unless you turn some back on.")
+        await _send_promotion_preferences(query.message, context, user_id)
+        return
+
+    if query.data == "promo_consent_enable":
+        repo.grant_promotion_consent(user_id, source="telegram_bot")
+        await query.edit_message_text(
+            "You are now opted into optional Telegram promotions.\n\nChoose the promo types you want to receive."
+        )
+        await _send_promotion_preferences(query.message, context, user_id)
+        return
+
+    if query.data == "promo_consent_decline":
+        await query.edit_message_text(
+            "No problem. Promotions will stay off for this account unless you opt in later with /promotions."
+        )
+        return
+
+    if query.data == "promo_unsubscribe_all":
+        repo.revoke_promotion_consent(user_id)
+        await query.edit_message_text(
+            "You have unsubscribed from all Telegram promotions. We will stop sending affiliate offers to this account."
+        )
         await _send_promotion_preferences(query.message, context, user_id)
         return
 

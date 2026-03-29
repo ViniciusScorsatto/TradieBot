@@ -4,6 +4,8 @@ export async function sendTelegramMessage(
   options?: {
     buttonText?: string;
     buttonUrl?: string;
+    secondaryButtonText?: string;
+    secondaryButtonCallbackData?: string;
   }
 ) {
   const token = process.env.TELEGRAM_TOKEN;
@@ -11,12 +13,15 @@ export async function sendTelegramMessage(
     return false;
   }
 
-  const replyMarkup =
-    options?.buttonText && options?.buttonUrl
-      ? {
-          inline_keyboard: [[{ text: options.buttonText, url: options.buttonUrl }]]
-        }
-      : undefined;
+  const firstRow: Array<Record<string, string>> = [];
+  if (options?.buttonText && options?.buttonUrl) {
+    firstRow.push({ text: options.buttonText, url: options.buttonUrl });
+  }
+  if (options?.secondaryButtonText && options?.secondaryButtonCallbackData) {
+    firstRow.push({ text: options.secondaryButtonText, callback_data: options.secondaryButtonCallbackData });
+  }
+
+  const replyMarkup = firstRow.length > 0 ? { inline_keyboard: [firstRow] } : undefined;
 
   const response = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
     method: "POST",
