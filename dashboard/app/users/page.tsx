@@ -129,6 +129,27 @@ async function addVoiceCredits(formData: FormData) {
   redirect(`/users?message=${encodeURIComponent(`Added ${Math.floor(amount)} voice minutes to ${userName}`)}`);
 }
 
+async function deleteUserData(formData: FormData) {
+  "use server";
+
+  const userId = String(formData.get("userId") ?? "");
+  const userName = String(formData.get("userName") ?? "user");
+  if (!userId) {
+    return;
+  }
+
+  await prisma.user.delete({
+    where: { id: userId }
+  });
+
+  revalidatePath("/users");
+  revalidatePath("/");
+  revalidatePath("/billing");
+  revalidatePath("/tickets");
+  revalidatePath("/invoices");
+  redirect(`/users?message=${encodeURIComponent(`Deleted ${userName} and related data.`)}`);
+}
+
 export default async function UsersPage({
   searchParams
 }: {
@@ -243,6 +264,22 @@ export default async function UsersPage({
                             <input type="hidden" name="userId" value={user.id} />
                             <input type="hidden" name="userName" value={user.name} />
                             <ActionButton label="Reset Invoices" />
+                          </form>
+                        </div>
+                      </div>
+                      <div className="action-group action-group-danger">
+                        <span className="action-label">Privacy requests</span>
+                        <div className="row-actions">
+                          <a
+                            className="button small-button secondary-button"
+                            href={`/api/admin/users/${user.id}/export`}
+                          >
+                            Export JSON
+                          </a>
+                          <form action={deleteUserData}>
+                            <input type="hidden" name="userId" value={user.id} />
+                            <input type="hidden" name="userName" value={user.name} />
+                            <ActionButton label="Delete User Data" />
                           </form>
                         </div>
                       </div>

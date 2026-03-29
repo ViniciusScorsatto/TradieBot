@@ -431,6 +431,20 @@ a {
   box-shadow: 0 12px 24px rgba(216, 77, 34, 0.18);
 }
 
+.secondary-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: white;
+  color: var(--text);
+  border: 1px solid var(--line);
+  box-shadow: none;
+}
+
+.secondary-button:hover {
+  border-color: rgba(255, 106, 61, 0.28);
+}
+
 .button:disabled,
 .button[aria-disabled="true"] {
   cursor: wait;
@@ -464,6 +478,11 @@ a {
   border: 1px solid var(--line);
   border-radius: 16px;
   background: var(--panel-soft);
+}
+
+.action-group-danger {
+  border-color: rgba(180, 61, 61, 0.16);
+  background: rgba(180, 61, 61, 0.04);
 }
 
 .action-label {
