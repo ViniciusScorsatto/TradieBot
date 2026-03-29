@@ -166,6 +166,7 @@ Still recommended before broad public scale:
 - paid credits roll over; monthly reset only clears free usage counters
 - staging can use different free-tier env values for testing
 - the bot can be locked to approved testers
+- the operational launch source of truth is [docs/go-live-test-plan.md](/Users/viniciusscorsatto/Desktop/AI%20Projects/Nz%20Fuel/docs/go-live-test-plan.md)
 
 ## Important Environment Variables
 

@@ -48,6 +48,19 @@ This currently covers:
 - invoice parser coverage for common text and voice phrasing
 - invoice PDF generation smoke coverage when Python PDF dependencies are installed
 
+## Go-Live Runbook
+
+Use the living launch checklist here:
+
+- [docs/go-live-test-plan.md](/Users/viniciusscorsatto/Desktop/AI%20Projects/Nz%20Fuel/docs/go-live-test-plan.md)
+
+That runbook is the operational source of truth for:
+
+- preflight config checks
+- automated validation
+- manual staging signoff
+- final launch blockers and risks
+
 ### Test Helpers
 
 Reset one user's usage and paid credits:
