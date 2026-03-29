@@ -14,6 +14,7 @@ from PIL import Image
 from invoicebot.models import InvoiceItem, SupportTicket
 from invoicebot.services.billing import evaluate_quota
 from invoicebot.services.checkout import create_checkout_session
+from invoicebot.services.compliance import taxable_supply_gaps
 from invoicebot.services.emailing import send_invoice_email
 from invoicebot.services.mock_data import seed_mock_clients
 from invoicebot.services.parser import parse_line_items
@@ -685,6 +686,13 @@ async def generate_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         return
     profile = repo.get_or_create_profile(user_id)
     client = repo.get_client(user_id, draft.client_id) if draft.client_id else None
+    compliance_gaps = taxable_supply_gaps(profile, draft, client)
+    if compliance_gaps:
+        await update.message.reply_text(
+            "Before I generate this invoice, please fix these NZ tax invoice details:\n\n"
+            + "\n".join(f"- {gap}" for gap in compliance_gaps)
+        )
+        return
 
     decision = evaluate_quota(
         invoice_count_this_month=repo.invoice_count_this_month(user_id),
