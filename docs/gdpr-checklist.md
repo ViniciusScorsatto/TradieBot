@@ -88,10 +88,13 @@ This is the practical baseline checklist for getting InvoiceBot into a reasonabl
 - Public privacy page
 - Public terms page
 - Privacy contact route on the site
+- Admin user data export tooling
+- Admin user data deletion tooling
+- Minimized invoice activity list exposure in the admin dashboard
 
 ### Still to implement
 
-- Data export tooling
-- Data deletion tooling
 - Internal retention workflow
 - Formal subprocessors register page or section
+- Full admin 2FA enrollment flow with recovery codes
+- Role-based admin access if multiple operators need different permissions

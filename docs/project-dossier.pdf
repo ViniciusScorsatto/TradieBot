@@ -1,0 +1,317 @@
+%PDF-1.4
+%‚„œ”
+1 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
+endobj
+2 0 obj
+<< /Length 2657 >>
+stream
+BT
+/F1 11 Tf
+1 0 0 1 54 788 Tm (# InvoiceBot Project Dossier) Tj
+1 0 0 1 54 773 Tm () Tj
+1 0 0 1 54 758 Tm (Generated: 2026-03-29) Tj
+1 0 0 1 54 743 Tm () Tj
+1 0 0 1 54 728 Tm () Tj
+1 0 0 1 54 713 Tm (PROJECT SUMMARY) Tj
+1 0 0 1 54 698 Tm () Tj
+1 0 0 1 54 683 Tm () Tj
+1 0 0 1 54 668 Tm (InvoiceBot is a Telegram-first invoicing product for New Zealand small businesses and) Tj
+1 0 0 1 54 653 Tm (independent operators. The product lets a user create invoices by text or voice inside) Tj
+1 0 0 1 54 638 Tm (Telegram, generate branded PDF invoices, and optionally email them to clients. It) Tj
+1 0 0 1 54 623 Tm (includes a private admin dashboard, Stripe-powered paid top-ups, support ticket) Tj
+1 0 0 1 54 608 Tm (handling, and preference-based affiliate promotions.) Tj
+1 0 0 1 54 593 Tm () Tj
+1 0 0 1 54 578 Tm (Core surfaces:) Tj
+1 0 0 1 54 563 Tm () Tj
+1 0 0 1 54 548 Tm (- `bot/` Python Telegram bot) Tj
+1 0 0 1 54 533 Tm (- `dashboard/` internal Next.js admin dashboard) Tj
+1 0 0 1 54 518 Tm (- `site/` public marketing website) Tj
+1 0 0 1 54 503 Tm (- `prisma/` shared PostgreSQL schema and migrations) Tj
+1 0 0 1 54 488 Tm () Tj
+1 0 0 1 54 473 Tm () Tj
+1 0 0 1 54 458 Tm (CORE PRODUCT FEATURES IMPLEMENTED) Tj
+1 0 0 1 54 443 Tm () Tj
+1 0 0 1 54 428 Tm () Tj
+1 0 0 1 54 413 Tm (Telegram Bot) Tj
+1 0 0 1 54 398 Tm () Tj
+1 0 0 1 54 383 Tm (- `/start` onboarding with development notice and command guidance) Tj
+1 0 0 1 54 368 Tm (- `/invoice` flow with saved client selection, search, pagination, and skip support) Tj
+1 0 0 1 54 353 Tm (- text-based line item entry) Tj
+1 0 0 1 54 338 Tm (- voice transcription with OpenAI) Tj
+1 0 0 1 54 323 Tm (- multi-item parsing from single voice notes or text messages) Tj
+1 0 0 1 54 308 Tm (- item editing, deletion, and per-line discounts) Tj
+1 0 0 1 54 293 Tm (- `/generate` PDF confirmation and PDF generation) Tj
+1 0 0 1 54 278 Tm (- `/profile` business setup flow including:) Tj
+1 0 0 1 54 263 Tm (  - company name) Tj
+1 0 0 1 54 248 Tm (  - address) Tj
+1 0 0 1 54 233 Tm (  - email) Tj
+1 0 0 1 54 218 Tm (  - phone) Tj
+1 0 0 1 54 203 Tm (  - GST number) Tj
+1 0 0 1 54 188 Tm (  - payment details) Tj
+1 0 0 1 54 173 Tm (  - logo upload) Tj
+1 0 0 1 54 158 Tm (- `/template` invoice template selection) Tj
+1 0 0 1 54 143 Tm (- `/newclient` client creation) Tj
+1 0 0 1 54 128 Tm (- `/clients` searchable, paginated client management with edit/delete) Tj
+1 0 0 1 54 113 Tm (- `/history` and `/repeat`) Tj
+1 0 0 1 54 98 Tm (- `/support` support ticket creation) Tj
+1 0 0 1 54 83 Tm (- `/promotions` affiliate marketing preference selection) Tj
+1 0 0 1 54 38 Tm (InvoiceBot Project Dossier  |  Page 1 of 5) Tj
+ET
+endstream
+endobj
+3 0 obj
+<< /Type /Page /Parent 3 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 1 0 R >> >> /Contents 2 0 R >>
+endobj
+4 0 obj
+<< /Length 2464 >>
+stream
+BT
+/F1 11 Tf
+1 0 0 1 54 788 Tm () Tj
+1 0 0 1 54 773 Tm (Invoice Output) Tj
+1 0 0 1 54 758 Tm () Tj
+1 0 0 1 54 743 Tm (- branded multi-template PDF invoices) Tj
+1 0 0 1 54 728 Tm (- one-page layout for up to 7 items) Tj
+1 0 0 1 54 713 Tm (- two-page layout for 8 to 14 items) Tj
+1 0 0 1 54 698 Tm (- GST-aware totals) Tj
+1 0 0 1 54 683 Tm (- payment details block) Tj
+1 0 0 1 54 668 Tm (- business logo support) Tj
+1 0 0 1 54 653 Tm (- item-level discount display) Tj
+1 0 0 1 54 638 Tm (- invoice summary with subtotal, discounts, GST, and total) Tj
+1 0 0 1 54 623 Tm () Tj
+1 0 0 1 54 608 Tm (Billing) Tj
+1 0 0 1 54 593 Tm () Tj
+1 0 0 1 54 578 Tm (- Stripe checkout for invoice bundle purchases) Tj
+1 0 0 1 54 563 Tm (- Stripe checkout for standalone voice top-ups) Tj
+1 0 0 1 54 548 Tm (- webhook fulfillment into PostgreSQL) Tj
+1 0 0 1 54 533 Tm (- Telegram confirmation after successful payment) Tj
+1 0 0 1 54 518 Tm (- paid credit rollover) Tj
+1 0 0 1 54 503 Tm () Tj
+1 0 0 1 54 488 Tm (Current pricing model in code:) Tj
+1 0 0 1 54 473 Tm () Tj
+1 0 0 1 54 458 Tm (- free tier: `10` invoices per month) Tj
+1 0 0 1 54 443 Tm (- free tier: `5` voice minutes per month) Tj
+1 0 0 1 54 428 Tm (- invoice bundle: `20` invoices plus `10` bundled voice minutes) Tj
+1 0 0 1 54 413 Tm (- standalone voice add-on: `10` voice minutes) Tj
+1 0 0 1 54 398 Tm (- voice note cap: `60` seconds) Tj
+1 0 0 1 54 383 Tm () Tj
+1 0 0 1 54 368 Tm (Email) Tj
+1 0 0 1 54 353 Tm () Tj
+1 0 0 1 54 338 Tm (- generated invoices can be emailed to the selected client) Tj
+1 0 0 1 54 323 Tm (- Mailjet integration for sending PDF attachments) Tj
+1 0 0 1 54 308 Tm (- email send history is tracked on invoices) Tj
+1 0 0 1 54 293 Tm () Tj
+1 0 0 1 54 278 Tm (Admin Dashboard) Tj
+1 0 0 1 54 263 Tm () Tj
+1 0 0 1 54 248 Tm (- authenticated dashboard access) Tj
+1 0 0 1 54 233 Tm (- sign-in and sign-out) Tj
+1 0 0 1 54 218 Tm (- overview metrics from live database data) Tj
+1 0 0 1 54 203 Tm (- billing page with live payment activity) Tj
+1 0 0 1 54 188 Tm (- users page with:) Tj
+1 0 0 1 54 173 Tm (  - quota visibility) Tj
+1 0 0 1 54 158 Tm (  - add credits) Tj
+1 0 0 1 54 143 Tm (  - reset usage) Tj
+1 0 0 1 54 128 Tm (  - export user data) Tj
+1 0 0 1 54 113 Tm (  - delete user data) Tj
+1 0 0 1 54 98 Tm (- invoices page with recent invoice activity) Tj
+1 0 0 1 54 83 Tm (- tickets page with live support queue and reply flow) Tj
+1 0 0 1 54 38 Tm (InvoiceBot Project Dossier  |  Page 2 of 5) Tj
+ET
+endstream
+endobj
+5 0 obj
+<< /Type /Page /Parent 3 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 1 0 R >> >> /Contents 4 0 R >>
+endobj
+6 0 obj
+<< /Length 2559 >>
+stream
+BT
+/F1 11 Tf
+1 0 0 1 54 788 Tm (- promotions page for affiliate campaign targeting) Tj
+1 0 0 1 54 773 Tm () Tj
+1 0 0 1 54 758 Tm () Tj
+1 0 0 1 54 743 Tm (SECURITY MEASURES IMPLEMENTED) Tj
+1 0 0 1 54 728 Tm () Tj
+1 0 0 1 54 713 Tm () Tj
+1 0 0 1 54 698 Tm (- admin dashboard access is protected by login) Tj
+1 0 0 1 54 683 Tm (- TOTP-capable admin authentication via seeded env configuration) Tj
+1 0 0 1 54 668 Tm (- bot allowlist support through `ALLOWED_TELEGRAM_USER_IDS`) Tj
+1 0 0 1 54 653 Tm (- bot admin privilege support through `ADMIN_TELEGRAM_USER_IDS`) Tj
+1 0 0 1 54 638 Tm (- environment-based staging safeguards via `APP_ENV`) Tj
+1 0 0 1 54 623 Tm (- production blocking of staging-only mock data command) Tj
+1 0 0 1 54 608 Tm (- secrets stored via environment variables) Tj
+1 0 0 1 54 593 Tm (- dedicated encryption key configured via `INVOICEBOT_ENCRYPTION_KEY`) Tj
+1 0 0 1 54 578 Tm (- authenticated admin export route for user data exports) Tj
+1 0 0 1 54 563 Tm (- destructive user deletion is limited to the admin dashboard) Tj
+1 0 0 1 54 548 Tm (- database schema changes are migration-driven through Prisma) Tj
+1 0 0 1 54 533 Tm (- runtime schema drift protections were removed in favor of migrations) Tj
+1 0 0 1 54 518 Tm () Tj
+1 0 0 1 54 503 Tm () Tj
+1 0 0 1 54 488 Tm (PRIVACY / COMPLIANCE MEASURES IMPLEMENTED) Tj
+1 0 0 1 54 473 Tm () Tj
+1 0 0 1 54 458 Tm () Tj
+1 0 0 1 54 443 Tm (Public-Facing) Tj
+1 0 0 1 54 428 Tm () Tj
+1 0 0 1 54 413 Tm (- privacy policy page) Tj
+1 0 0 1 54 398 Tm (- terms page) Tj
+1 0 0 1 54 383 Tm (- privacy contact route on the site) Tj
+1 0 0 1 54 368 Tm () Tj
+1 0 0 1 54 353 Tm (Administrative Controls) Tj
+1 0 0 1 54 338 Tm () Tj
+1 0 0 1 54 323 Tm (- user data export tooling) Tj
+1 0 0 1 54 308 Tm (- user data deletion tooling) Tj
+1 0 0 1 54 293 Tm (- minimized invoice activity exposure in admin list views) Tj
+1 0 0 1 54 278 Tm (- masked client names in invoice history list) Tj
+1 0 0 1 54 263 Tm (- hidden recipient email addresses in invoice history list view) Tj
+1 0 0 1 54 248 Tm () Tj
+1 0 0 1 54 233 Tm (Documentation) Tj
+1 0 0 1 54 218 Tm () Tj
+1 0 0 1 54 203 Tm (- GDPR checklist) Tj
+1 0 0 1 54 188 Tm (- Railway deployment guide) Tj
+1 0 0 1 54 173 Tm (- database migration playbook) Tj
+1 0 0 1 54 158 Tm () Tj
+1 0 0 1 54 143 Tm () Tj
+1 0 0 1 54 128 Tm (COMPLIANCE NOTES) Tj
+1 0 0 1 54 113 Tm () Tj
+1 0 0 1 54 98 Tm () Tj
+1 0 0 1 54 83 Tm (This project is not automatically ?certified compliant,? but it has a solid baseline for) Tj
+1 0 0 1 54 38 Tm (InvoiceBot Project Dossier  |  Page 3 of 5) Tj
+ET
+endstream
+endobj
+7 0 obj
+<< /Type /Page /Parent 3 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 1 0 R >> >> /Contents 6 0 R >>
+endobj
+8 0 obj
+<< /Length 2511 >>
+stream
+BT
+/F1 11 Tf
+1 0 0 1 54 788 Tm (GDPR-style privacy controls:) Tj
+1 0 0 1 54 773 Tm () Tj
+1 0 0 1 54 758 Tm (- authenticated access to admin data) Tj
+1 0 0 1 54 743 Tm (- data minimisation improvements in overview/list views) Tj
+1 0 0 1 54 728 Tm (- user export and deletion tooling) Tj
+1 0 0 1 54 713 Tm (- privacy and terms pages) Tj
+1 0 0 1 54 698 Tm (- documented subprocessor usage) Tj
+1 0 0 1 54 683 Tm (- documented migration and deployment process) Tj
+1 0 0 1 54 668 Tm () Tj
+1 0 0 1 54 653 Tm (Still recommended before broad public scale:) Tj
+1 0 0 1 54 638 Tm () Tj
+1 0 0 1 54 623 Tm (- full admin 2FA enrollment flow with QR setup and recovery codes) Tj
+1 0 0 1 54 608 Tm (- retention schedule and cleanup jobs for stale/non-essential data) Tj
+1 0 0 1 54 593 Tm (- formal subprocessors register section) Tj
+1 0 0 1 54 578 Tm (- documented internal breach-response process) Tj
+1 0 0 1 54 563 Tm (- role-based access control if more than one operator will use the dashboard) Tj
+1 0 0 1 54 548 Tm (- legal review of privacy policy / terms before public launch) Tj
+1 0 0 1 54 533 Tm () Tj
+1 0 0 1 54 518 Tm () Tj
+1 0 0 1 54 503 Tm (INFRASTRUCTURE) Tj
+1 0 0 1 54 488 Tm () Tj
+1 0 0 1 54 473 Tm () Tj
+1 0 0 1 54 458 Tm (- Railway for deployment) Tj
+1 0 0 1 54 443 Tm (- PostgreSQL as primary database) Tj
+1 0 0 1 54 428 Tm (- Prisma schema and migrations as database source of truth) Tj
+1 0 0 1 54 413 Tm (- Python Telegram bot worker) Tj
+1 0 0 1 54 398 Tm (- Next.js dashboard and site) Tj
+1 0 0 1 54 383 Tm (- OpenAI for transcription) Tj
+1 0 0 1 54 368 Tm (- Stripe for payments) Tj
+1 0 0 1 54 353 Tm (- Mailjet for invoice email delivery) Tj
+1 0 0 1 54 338 Tm () Tj
+1 0 0 1 54 323 Tm () Tj
+1 0 0 1 54 308 Tm (OPERATIONAL NOTES) Tj
+1 0 0 1 54 293 Tm () Tj
+1 0 0 1 54 278 Tm () Tj
+1 0 0 1 54 263 Tm (- safest schema deploy order:) Tj
+1 0 0 1 54 248 Tm (  1. deploy dashboard so Prisma migrations run) Tj
+1 0 0 1 54 233 Tm (  2. deploy bot) Tj
+1 0 0 1 54 218 Tm (  3. deploy other dependent services) Tj
+1 0 0 1 54 203 Tm (- paid credits roll over; monthly reset only clears free usage counters) Tj
+1 0 0 1 54 188 Tm (- staging can use different free-tier env values for testing) Tj
+1 0 0 1 54 173 Tm (- the bot can be locked to approved testers) Tj
+1 0 0 1 54 158 Tm () Tj
+1 0 0 1 54 143 Tm () Tj
+1 0 0 1 54 128 Tm (IMPORTANT ENVIRONMENT VARIABLES) Tj
+1 0 0 1 54 113 Tm () Tj
+1 0 0 1 54 98 Tm () Tj
+1 0 0 1 54 83 Tm (- `DATABASE_URL`) Tj
+1 0 0 1 54 38 Tm (InvoiceBot Project Dossier  |  Page 4 of 5) Tj
+ET
+endstream
+endobj
+9 0 obj
+<< /Type /Page /Parent 3 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 1 0 R >> >> /Contents 8 0 R >>
+endobj
+10 0 obj
+<< /Length 1632 >>
+stream
+BT
+/F1 11 Tf
+1 0 0 1 54 788 Tm (- `TELEGRAM_TOKEN`) Tj
+1 0 0 1 54 773 Tm (- `OPENAI_API_KEY`) Tj
+1 0 0 1 54 758 Tm (- `MAILJET_API_KEY`) Tj
+1 0 0 1 54 743 Tm (- `MAILJET_SECRET_KEY`) Tj
+1 0 0 1 54 728 Tm (- `EMAIL_FROM`) Tj
+1 0 0 1 54 713 Tm (- `STRIPE_SECRET_KEY`) Tj
+1 0 0 1 54 698 Tm (- `STRIPE_WEBHOOK_SECRET`) Tj
+1 0 0 1 54 683 Tm (- `STRIPE_INVOICE_PRICE_ID`) Tj
+1 0 0 1 54 668 Tm (- `STRIPE_VOICE_PRICE_ID`) Tj
+1 0 0 1 54 653 Tm (- `NEXTAUTH_SECRET`) Tj
+1 0 0 1 54 638 Tm (- `NEXTAUTH_URL`) Tj
+1 0 0 1 54 623 Tm (- `ADMIN_EMAIL`) Tj
+1 0 0 1 54 608 Tm (- `ADMIN_PASSWORD_HASH`) Tj
+1 0 0 1 54 593 Tm (- `ADMIN_TOTP_SECRET`) Tj
+1 0 0 1 54 578 Tm (- `INVOICEBOT_ENCRYPTION_KEY`) Tj
+1 0 0 1 54 563 Tm (- `ALLOWED_TELEGRAM_USER_IDS`) Tj
+1 0 0 1 54 548 Tm (- `ADMIN_TELEGRAM_USER_IDS`) Tj
+1 0 0 1 54 533 Tm () Tj
+1 0 0 1 54 518 Tm () Tj
+1 0 0 1 54 503 Tm (STATUS SNAPSHOT) Tj
+1 0 0 1 54 488 Tm () Tj
+1 0 0 1 54 473 Tm () Tj
+1 0 0 1 54 458 Tm (The product has a functioning end-to-end loop:) Tj
+1 0 0 1 54 443 Tm () Tj
+1 0 0 1 54 428 Tm (- create invoice in Telegram) Tj
+1 0 0 1 54 413 Tm (- generate branded PDF) Tj
+1 0 0 1 54 398 Tm (- email invoice to client) Tj
+1 0 0 1 54 383 Tm (- handle payments through Stripe) Tj
+1 0 0 1 54 368 Tm (- manage users, billing, tickets, invoice history, and promotions from the admin) Tj
+1 0 0 1 54 353 Tm (  dashboard) Tj
+1 0 0 1 54 338 Tm () Tj
+1 0 0 1 54 323 Tm (This is now a strong MVP / early production candidate with meaningful operational,) Tj
+1 0 0 1 54 308 Tm (billing, privacy, and support foundations in place.) Tj
+1 0 0 1 54 38 Tm (InvoiceBot Project Dossier  |  Page 5 of 5) Tj
+ET
+endstream
+endobj
+11 0 obj
+<< /Type /Page /Parent 3 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 1 0 R >> >> /Contents 10 0 R >>
+endobj
+12 0 obj
+<< /Type /Pages /Kids [3 0 R 5 0 R 7 0 R 9 0 R 11 0 R] /Count 5 >>
+endobj
+13 0 obj
+<< /Type /Catalog /Pages 12 0 R >>
+endobj
+xref
+0 14
+0000000000 65535 f 
+0000000015 00000 n 
+0000000085 00000 n 
+0000002794 00000 n 
+0000002920 00000 n 
+0000005436 00000 n 
+0000005562 00000 n 
+0000008173 00000 n 
+0000008299 00000 n 
+0000010862 00000 n 
+0000010988 00000 n 
+0000012673 00000 n 
+0000012801 00000 n 
+0000012884 00000 n 
+trailer
+<< /Size 14 /Root 13 0 R >>
+startxref
+12935
+%%EOF
