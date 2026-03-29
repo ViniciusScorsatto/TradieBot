@@ -38,6 +38,7 @@ FIELD_LIMITS = {
     "business email": 80,
     "business phone": 32,
     "GST number": 32,
+    "payment details": 160,
     "client name": 60,
     "client company": 60,
     "client email": 80,
@@ -760,6 +761,20 @@ def _gst_skip_keyboard(profile):
     return _skip_keyboard("profile_gst_number", label=label)
 
 
+def _payment_details_prompt(profile) -> str:
+    return _profile_step_prompt(
+        profile,
+        "bank_details",
+        "payment details",
+        "Now send your payment details, like bank account name, account number, or a short payment note that should appear on the invoice",
+    )
+
+
+def _payment_skip_keyboard(profile):
+    label = "Keep current" if profile.bank_details else "Skip for now"
+    return _skip_keyboard("profile_bank_details", label=label)
+
+
 async def template_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if not _is_user_allowed(update, context):
         await _deny_access(update, context)
@@ -1094,6 +1109,24 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
                 profile.gst_number = ""
         else:
             profile.gst_number = text
+        repo.save_profile(user_id, profile)
+        context.user_data["mode"] = "profile_bank_details"
+        await update.message.reply_text(
+            _payment_details_prompt(profile),
+            parse_mode="Markdown",
+            reply_markup=_payment_skip_keyboard(profile),
+        )
+        return
+
+    if mode == "profile_bank_details":
+        profile = repo.get_or_create_profile(user_id)
+        if text.lower() != "skip" and not await _validate_text_length(update.message, "payment details", text):
+            return
+        if text.lower() == "skip":
+            if not profile.bank_details:
+                profile.bank_details = ""
+        else:
+            profile.bank_details = text
         repo.save_profile(user_id, profile)
         context.user_data["mode"] = "profile_logo"
         logo_text, keyboard = _logo_prompt(profile)
@@ -1520,12 +1553,25 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             )
             return
         if step == "profile_gst_number":
-            context.user_data["mode"] = "profile_logo"
+            context.user_data["mode"] = "profile_bank_details"
             profile = repo.get_or_create_profile(user_id)
             if profile.gst_number:
                 await query.edit_message_text("Keeping current GST number.")
             else:
                 await query.edit_message_text("Skipping GST number. GST will not be added to invoices.")
+            await query.message.reply_text(
+                _payment_details_prompt(profile),
+                parse_mode="Markdown",
+                reply_markup=_payment_skip_keyboard(profile),
+            )
+            return
+        if step == "profile_bank_details":
+            context.user_data["mode"] = "profile_logo"
+            profile = repo.get_or_create_profile(user_id)
+            if profile.bank_details:
+                await query.edit_message_text("Keeping current payment details.")
+            else:
+                await query.edit_message_text("Skipping payment details for now.")
             logo_text, keyboard = _logo_prompt(profile)
             await query.message.reply_text(logo_text, reply_markup=keyboard)
             return

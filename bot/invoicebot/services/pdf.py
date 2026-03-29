@@ -187,6 +187,39 @@ def _draw_summary(
         pdf.drawString(summary_x + 10, line_y, label)
         pdf.drawRightString(page_right - 8, line_y, _money(amount))
         line_y -= 28
+    return line_y
+
+
+def _draw_payment_details(
+    pdf: canvas.Canvas,
+    profile: Profile,
+    *,
+    page_left: float,
+    page_right: float,
+    start_y: float,
+) -> None:
+    if not profile.bank_details:
+        return
+
+    box_x = page_left + 275
+    box_width = page_right - box_x
+    box_top = start_y - 6
+    box_bottom = max(36, box_top - 54)
+
+    pdf.setFillColor(colors.HexColor("#f7f8fa"))
+    pdf.roundRect(box_x, box_bottom, box_width, box_top - box_bottom, 8, fill=1, stroke=0)
+    pdf.setFillColor(colors.HexColor("#535862"))
+    pdf.setFont("Helvetica-Bold", 10)
+    pdf.drawString(box_x + 10, box_top - 16, "Payment details")
+    pdf.setFont("Helvetica", 9.5)
+    _draw_wrapped_lines(
+        pdf,
+        box_x + 10,
+        box_top - 32,
+        [profile.bank_details],
+        width=box_width - 20,
+        step=11,
+    )
 
 
 def _draw_first_page_header(
@@ -314,7 +347,7 @@ def render_invoice_pdf(profile: Profile, draft: InvoiceDraft, client: Client | N
         _draw_table_header(pdf, page_left=page_left, page_right=page_right, content_width=content_width, table_top=table_top)
         y = _draw_items_table(pdf, item_pages[1], profile, page_left=page_left, page_right=page_right, table_top=table_top)
 
-    _draw_summary(
+    summary_end_y = _draw_summary(
         pdf,
         draft,
         profile,
@@ -322,6 +355,13 @@ def render_invoice_pdf(profile: Profile, draft: InvoiceDraft, client: Client | N
         page_right=page_right,
         content_width=content_width,
         summary_title_y=y - 4,
+    )
+    _draw_payment_details(
+        pdf,
+        profile,
+        page_left=page_left,
+        page_right=page_right,
+        start_y=summary_end_y,
     )
 
     pdf.showPage()
