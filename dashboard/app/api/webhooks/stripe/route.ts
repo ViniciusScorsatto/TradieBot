@@ -93,13 +93,14 @@ async function fulfillCheckout(session: Stripe.Checkout.Session) {
   await prisma.$executeRaw`
     UPDATE users
     SET paid_invoice_credits = paid_invoice_credits + ${creditsPurchased},
+        paid_voice_seconds = paid_voice_seconds + ${Number(process.env.INVOICE_BUNDLE_VOICE_MINUTES ?? "10") * 60},
         plan_tier = 'PAID',
         updated_at = NOW()
     WHERE id = ${userId}
   `;
   await sendTelegramMessage(
     String(telegramUserId),
-    `Payment received. ${creditsPurchased} invoice credits have been added to your account. You can keep generating invoices now.`
+    `Payment received. ${creditsPurchased} invoice credits and ${Number(process.env.INVOICE_BUNDLE_VOICE_MINUTES ?? "10")} voice minutes have been added to your account. You can keep generating invoices now.`
   );
   return { ok: true, action: "unlock_invoice_credits" };
 }

@@ -49,8 +49,9 @@ export const pricing = {
   warningThreshold: 8,
   paidBlockSize: 20,
   paidBlockPriceNzd: 5,
-  freeVoiceMinutesPerMonth: 20,
-  paidVoiceMinutesBlock: 100,
+  invoiceBundleVoiceMinutes: 10,
+  freeVoiceMinutesPerMonth: 5,
+  paidVoiceMinutesBlock: 10,
   voiceNoteMaxSeconds: 60
 };
 

@@ -138,8 +138,9 @@ export default async function UsersPage({
   const message = searchParams?.message;
   const freeInvoiceLimit = Number(process.env.FREE_INVOICE_LIMIT ?? "10");
   const paidInvoiceBlock = Number(process.env.PAID_INVOICE_BLOCK ?? "20");
-  const freeVoiceLimit = Number(process.env.FREE_VOICE_MINUTES_PER_MONTH ?? process.env.FREE_VOICE_TRANSCRIPTIONS_PER_MONTH ?? "20");
-  const paidVoiceBlock = Number(process.env.PAID_VOICE_MINUTES ?? process.env.PAID_VOICE_BLOCK ?? "100");
+  const invoiceBundleVoiceMinutes = Number(process.env.INVOICE_BUNDLE_VOICE_MINUTES ?? "10");
+  const freeVoiceLimit = Number(process.env.FREE_VOICE_MINUTES_PER_MONTH ?? process.env.FREE_VOICE_TRANSCRIPTIONS_PER_MONTH ?? "5");
+  const paidVoiceBlock = Number(process.env.PAID_VOICE_MINUTES ?? process.env.PAID_VOICE_BLOCK ?? "10");
   return (
     <div className="stack">
       <section className="hero-card">
@@ -150,7 +151,7 @@ export default async function UsersPage({
         </p>
         <p>
           Current environment: {freeInvoiceLimit} free invoices, +{paidInvoiceBlock} invoices per paid block,
-          {freeVoiceLimit} free voice minutes, +{paidVoiceBlock} voice minutes per paid block.
+          {freeVoiceLimit} free voice minutes, +{invoiceBundleVoiceMinutes} voice minutes bundled with invoice purchases, and +{paidVoiceBlock} voice minutes in the standalone voice add-on.
         </p>
       </section>
 

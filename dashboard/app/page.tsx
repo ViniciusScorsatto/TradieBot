@@ -103,8 +103,8 @@ export default async function DashboardHome() {
           <p>
             Free plan includes {dashboardCopy.pricing.freeInvoicesPerMonth} invoices per month.
             Warn at {dashboardCopy.pricing.warningThreshold}, then sell another block of{" "}
-            {dashboardCopy.pricing.paidBlockSize} for NZD ${dashboardCopy.pricing.paidBlockPriceNzd}. Voice starts with{" "}
-            {dashboardCopy.pricing.freeVoiceMinutesPerMonth} free voice minutes and can be topped up in minute bundles.
+            {dashboardCopy.pricing.paidBlockSize} plus {dashboardCopy.pricing.invoiceBundleVoiceMinutes} voice minutes for NZD ${dashboardCopy.pricing.paidBlockPriceNzd}. Voice starts with{" "}
+            {dashboardCopy.pricing.freeVoiceMinutesPerMonth} free voice minutes and can also be topped up separately.
           </p>
           <table className="table">
             <thead>

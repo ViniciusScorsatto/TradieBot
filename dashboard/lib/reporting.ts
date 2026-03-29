@@ -1,3 +1,4 @@
+import { pricing } from "@invoicebot/shared";
 import { prisma } from "./prisma";
 
 export type OverviewStat = {
@@ -30,7 +31,7 @@ function formatPurchaseCredits(purchaseType: string, creditsPurchased: number) {
   if (purchaseType === "voice") {
     return `${creditsPurchased} min`;
   }
-  return `${creditsPurchased} invoices`;
+  return `${creditsPurchased} invoices + ${pricing.invoiceBundleVoiceMinutes} min`;
 }
 
 export async function loadOverviewStats(): Promise<OverviewStat[]> {

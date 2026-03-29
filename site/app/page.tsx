@@ -26,7 +26,7 @@ const faqs = [
   },
   {
     title: "Is voice invoicing included?",
-    body: `Yes, with guardrails. Voice starts with ${pricing.freeVoiceMinutesPerMonth} free minutes per month, then becomes a premium-metered feature.`
+    body: `Yes, with guardrails. Voice starts with ${pricing.freeVoiceMinutesPerMonth} free minutes per month. Paid invoice bundles include ${pricing.invoiceBundleVoiceMinutes} extra voice minutes, and there is also a separate voice add-on.`
   },
   {
     title: "Can I save clients and business details?",
@@ -186,8 +186,8 @@ export default function HomePage() {
             <h3>Simple pricing</h3>
             <div className="priceValue">10 free</div>
             <p>
-              Start free every month. Voice also includes {pricing.freeVoiceMinutesPerMonth} free minutes,
-              then unlock another {pricing.paidBlockSize} invoices for NZD ${pricing.paidBlockPriceNzd}.
+              Start free every month. Voice includes {pricing.freeVoiceMinutesPerMonth} free minutes,
+              then unlock another {pricing.paidBlockSize} invoices plus {pricing.invoiceBundleVoiceMinutes} voice minutes for NZD ${pricing.paidBlockPriceNzd}.
             </p>
           </article>
           <article className="priceCard">

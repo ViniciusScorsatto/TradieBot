@@ -14,7 +14,7 @@ def evaluate_quota(invoice_count_this_month: int, paid_credits: int, free_limit:
     if invoice_count_this_month >= free_limit and paid_credits <= 0:
         return BillingDecision(
             allowed=False,
-            message="You have used your 10 free invoices this month. Pay NZD $5 to unlock another block of 20 invoices.",
+            message="You have used your 10 free invoices this month. Pay NZD $5 to unlock another block of 20 invoices plus 10 voice minutes.",
         )
     if invoice_count_this_month == warning_threshold:
         return BillingDecision(

@@ -50,8 +50,8 @@ export default function PricingPage({
           <h3>Extra usage</h3>
           <div className="priceValue">NZD ${pricing.paidBlockPriceNzd}</div>
           <p>
-            Unlock another {pricing.paidBlockSize} invoices whenever you hit the monthly limit.
-            Voice is positioned as a premium-metered feature after the free allowance, sold in minute bundles.
+            Unlock another {pricing.paidBlockSize} invoices plus {pricing.invoiceBundleVoiceMinutes} bundled voice minutes whenever you hit the monthly limit.
+            If you need more voice on top, there is also a separate voice add-on.
           </p>
           <div className="pricingActions">
             <a className="cta" href={siteConfig.botDeepLink} target="_blank" rel="noreferrer">

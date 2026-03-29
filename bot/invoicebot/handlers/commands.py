@@ -519,8 +519,15 @@ async def _send_draft_editor(message: Message | None, draft) -> None:
     )
 
 
-def _invoice_limit_keyboard() -> InlineKeyboardMarkup:
-    return InlineKeyboardMarkup([[InlineKeyboardButton("Unlock 20 more invoices", callback_data="buy_invoice_credits")]])
+def _invoice_limit_keyboard(settings) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        [[
+            InlineKeyboardButton(
+                f"Unlock {settings.paid_invoice_block} invoices + {settings.invoice_bundle_voice_minutes} voice min",
+                callback_data="buy_invoice_credits",
+            )
+        ]]
+    )
 
 
 def _post_generate_keyboard(*, can_email: bool) -> InlineKeyboardMarkup | None:
@@ -570,16 +577,16 @@ async def _send_checkout_prompt(
         credits_purchased = settings.paid_voice_minutes
         button_label = f"Pay NZD $5 for {credits_purchased} voice minutes"
         body = (
-            "Unlock more voice time with a secure Stripe checkout.\n\n"
+            "Need more voice? Unlock extra voice time with a secure Stripe checkout.\n\n"
             f"This purchase adds {credits_purchased} voice minutes to your account."
         )
     else:
         price_id = settings.stripe_invoice_price_id
         credits_purchased = settings.paid_invoice_block
-        button_label = f"Pay NZD $5 for {credits_purchased} invoices"
+        button_label = f"Pay NZD $5 for {credits_purchased} invoices + {settings.invoice_bundle_voice_minutes} voice min"
         body = (
             "Unlock more invoice credits with a secure Stripe checkout.\n\n"
-            f"This purchase adds {credits_purchased} invoices to your account."
+            f"This purchase adds {credits_purchased} invoices and {settings.invoice_bundle_voice_minutes} voice minutes to your account."
         )
 
     if not price_id:
@@ -689,7 +696,7 @@ async def generate_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     if not decision.allowed:
         await update.message.reply_text(
             decision.message or "Payment required.",
-            reply_markup=_invoice_limit_keyboard(),
+            reply_markup=_invoice_limit_keyboard(context.application.bot_data["settings"]),
         )
         return
 
