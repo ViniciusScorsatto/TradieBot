@@ -1,0 +1,3 @@
+ALTER TABLE "invoices"
+  ADD COLUMN IF NOT EXISTS "emailed_to" TEXT,
+  ADD COLUMN IF NOT EXISTS "emailed_at" TIMESTAMPTZ;

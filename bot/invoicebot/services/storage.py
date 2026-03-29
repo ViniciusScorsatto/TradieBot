@@ -29,6 +29,7 @@ class Repository(Protocol):
     def update_client(self, user_id: str, client: Client) -> Client | None: ...
     def delete_client(self, user_id: str, client_id: str) -> bool: ...
     def list_history(self, user_id: str) -> list[InvoiceDraft]: ...
+    def record_invoice_email(self, user_id: str, invoice_number: str, to_email: str) -> None: ...
     def record_ticket(self, ticket: SupportTicket) -> None: ...
     def list_promotion_preferences(self, user_id: str) -> list[str]: ...
     def save_promotion_preferences(self, user_id: str, categories: list[str]) -> None: ...
@@ -127,6 +128,9 @@ class InMemoryRepository:
     def record_ticket(self, ticket: SupportTicket) -> None:
         self.tickets[ticket.user_id].append(ticket)
 
+    def record_invoice_email(self, user_id: str, invoice_number: str, to_email: str) -> None:
+        return None
+
     def list_promotion_preferences(self, user_id: str) -> list[str]:
         return sorted(self.promotion_preferences[user_id])
 
@@ -185,7 +189,7 @@ class PostgresRepository:
             "clients": {"id", "user_id", "name", "address"},
             "invoice_drafts": {"id", "user_id", "client_id", "status", "subtotal_cents", "gst_cents", "total_cents"},
             "invoice_draft_items": {"id", "draft_id", "description", "quantity", "unit_price", "discount_cents", "discount_percent", "line_total"},
-            "invoices": {"id", "user_id", "client_id", "profile_snapshot", "invoice_number", "template_id", "subtotal_cents", "gst_cents", "total_cents"},
+            "invoices": {"id", "user_id", "client_id", "profile_snapshot", "invoice_number", "template_id", "subtotal_cents", "gst_cents", "total_cents", "emailed_to", "emailed_at"},
             "invoice_items": {"id", "invoice_id", "description", "quantity", "unit_price", "discount_cents", "discount_percent", "line_total"},
             "tickets": {"id", "user_id", "type", "status", "subject"},
             "ticket_messages": {"id", "ticket_id", "sender", "body"},
@@ -725,6 +729,20 @@ class PostgresRepository:
                 VALUES (%s, %s, %s, %s)
                 """,
                 (str(uuid4()), ticket_id, "telegram_user", ticket.body),
+            )
+            conn.commit()
+
+    def record_invoice_email(self, user_id: str, invoice_number: str, to_email: str) -> None:
+        user = self._ensure_user(user_id)
+        with self._connect() as conn, conn.cursor() as cur:
+            cur.execute(
+                """
+                UPDATE invoices
+                SET emailed_to = %s,
+                    emailed_at = NOW()
+                WHERE user_id = %s AND invoice_number = %s
+                """,
+                (to_email, user["id"], invoice_number),
             )
             conn.commit()
 

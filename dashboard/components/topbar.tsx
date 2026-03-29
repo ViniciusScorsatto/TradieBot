@@ -6,6 +6,7 @@ import { signOutAction } from "../app/auth-actions";
 const titles: Record<string, { title: string; subtitle: string }> = {
   "/": { title: "Dashboard", subtitle: "Operations snapshot across billing, support, and usage." },
   "/users": { title: "Users", subtitle: "Manage customers, credits, and quota resets." },
+  "/invoices": { title: "Invoices", subtitle: "Review generated invoices and email send history." },
   "/billing": { title: "Billing", subtitle: "Track Stripe activity and purchased credit blocks." },
   "/promotions": { title: "Promotions", subtitle: "Send affiliate campaigns to opted-in audiences." },
   "/tickets": { title: "Tickets", subtitle: "Handle bugs, claims, and support conversations." },

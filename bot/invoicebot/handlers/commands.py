@@ -1801,6 +1801,7 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
                 filename=last_invoice["filename"],
                 reply_to=last_invoice.get("reply_to") or None,
             )
+            repo.record_invoice_email(user_id, last_invoice["invoice_number"], last_invoice["client_email"])
             await query.edit_message_text(f"Invoice emailed to {last_invoice['client_email']}.")
         except ValueError as exc:
             await query.edit_message_text(f"Email sending is not fully configured yet: {exc}")

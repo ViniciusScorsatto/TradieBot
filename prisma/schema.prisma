@@ -115,6 +115,8 @@ model Invoice {
   totalCents      Int         @map("total_cents")
   notes           String?
   pdfUrl          String?     @map("pdf_url")
+  emailedTo       String?     @map("emailed_to")
+  emailedAt       DateTime?   @map("emailed_at")
   createdAt       DateTime    @default(now()) @map("created_at")
   user            User        @relation(fields: [userId], references: [id], onDelete: Cascade)
   client          Client?     @relation(fields: [clientId], references: [id])
