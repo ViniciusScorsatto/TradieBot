@@ -19,6 +19,7 @@ from invoicebot.services.emailing import send_invoice_email
 from invoicebot.services.mock_data import seed_mock_clients
 from invoicebot.services.parser import parse_line_items
 from invoicebot.services.pdf import render_invoice_pdf
+from invoicebot.services.support_ai import BugSupportRequest, generate_bug_triage_reply
 from invoicebot.services.storage import Repository
 from invoicebot.services.tax import discount_total_cents, gst_cents, gst_summary_label, gross_subtotal_cents, total_cents
 from invoicebot.services.template_catalog import TEMPLATES
@@ -293,6 +294,64 @@ async def _send_promotion_preferences(message: Message | None, context: ContextT
         + f"Current preferences: {selected_labels}",
         reply_markup=_promotion_preferences_keyboard(selected),
     )
+
+
+async def _handle_bug_ai_triage(
+    message: Message | None,
+    context: ContextTypes.DEFAULT_TYPE,
+    *,
+    user_id: str,
+    ticket_id: str,
+    ticket: SupportTicket,
+) -> None:
+    if not message:
+        return
+
+    settings = context.application.bot_data["settings"]
+    repo = _repo(context)
+
+    if (
+        ticket.kind != "BUG"
+        or not settings.openai_api_key
+        or not settings.openai_support_vector_store_id
+    ):
+        await message.reply_text("Ticket submitted: {subject}\n\nWe’ll follow up in Telegram.".format(subject=ticket.subject))
+        return
+
+    if repo.bug_ai_assists_today(user_id) >= settings.openai_support_daily_limit:
+        await message.reply_text(
+            "Ticket submitted: {subject}\n\nI couldn’t send an instant bug triage reply right now, so this has been queued for human review.".format(
+                subject=ticket.subject
+            )
+        )
+        return
+
+    profile = repo.get_or_create_profile(user_id)
+    try:
+        ai_reply = await generate_bug_triage_reply(
+            api_key=settings.openai_api_key,
+            model=settings.openai_support_model,
+            vector_store_id=settings.openai_support_vector_store_id,
+            request=BugSupportRequest(
+                subject=ticket.subject,
+                body=ticket.body,
+                business_name=profile.company_name,
+            ),
+        )
+    except Exception:
+        traceback.print_exc()
+        ai_reply = None
+
+    if not ai_reply:
+        await message.reply_text(
+            "Ticket submitted: {subject}\n\nI couldn’t find a solid instant answer, so your ticket has been queued for review.".format(
+                subject=ticket.subject
+            )
+        )
+        return
+
+    repo.record_ticket_message(ticket_id, "ai", ai_reply, mark_ai_first_response=True)
+    await message.reply_text(f"Ticket submitted: {ticket.subject}\n\n{ai_reply}")
 
 
 def _item_line(item, index: int) -> str:
@@ -1309,13 +1368,11 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             subject=context.user_data.get("support_subject", f"{context.user_data.get('support_type', 'IDEA').title()} ticket"),
             body=text,
         )
-        repo.record_ticket(ticket)
+        ticket_id = repo.record_ticket(ticket)
         context.user_data["mode"] = None
         context.user_data.pop("support_type", None)
         context.user_data.pop("support_subject", None)
-        await update.message.reply_text(
-            f"Ticket submitted: {ticket.subject}\n\nWe’ll follow up in Telegram."
-        )
+        await _handle_bug_ai_triage(update.message, context, user_id=user_id, ticket_id=ticket_id, ticket=ticket)
         return
 
     await update.message.reply_text(

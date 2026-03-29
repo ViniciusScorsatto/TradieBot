@@ -622,6 +622,11 @@ a {
   border-color: rgba(255, 106, 61, 0.18);
 }
 
+.ai-bubble {
+  background: rgba(71, 158, 205, 0.1);
+  border-color: rgba(71, 158, 205, 0.22);
+}
+
 .ticket-status-form {
   display: flex;
   align-items: center;

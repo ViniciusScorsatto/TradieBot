@@ -71,6 +71,9 @@ Set these at the project level if multiple services need them:
 - `TELEGRAM_BOT_URL`
 - `NEXT_PUBLIC_TELEGRAM_BOT_URL`
 - `OPENAI_API_KEY`
+- `OPENAI_SUPPORT_MODEL`
+- `OPENAI_SUPPORT_VECTOR_STORE_ID`
+- `OPENAI_SUPPORT_DAILY_LIMIT`
 - `MAILJET_API_KEY`
 - `MAILJET_SECRET_KEY`
 - `EMAIL_FROM`
@@ -100,6 +103,9 @@ Set these at the project level if multiple services need them:
 
 - `TELEGRAM_TOKEN`
 - `OPENAI_API_KEY`
+- `OPENAI_SUPPORT_MODEL`
+- `OPENAI_SUPPORT_VECTOR_STORE_ID`
+- `OPENAI_SUPPORT_DAILY_LIMIT`
 - `MAILJET_API_KEY`
 - `MAILJET_SECRET_KEY`
 - `EMAIL_FROM`
@@ -163,3 +169,4 @@ Set these at the project level if multiple services need them:
 - To lock the bot to approved testers, set `ALLOWED_TELEGRAM_USER_IDS` on the bot service as a comma-separated list like `123456789,987654321`. Leave it empty to keep the bot publicly accessible.
 - To grant Telegram admin privileges, set `ADMIN_TELEGRAM_USER_IDS` on the bot service as a comma-separated list like `123456789`.
 - Set `APP_ENV=staging` on your staging bot and `APP_ENV=production` on production. The `/mockclients` command is automatically blocked in production.
+- To build the AI bug-triage knowledge base, curate markdown articles in `/docs/support-kb/bugs` and run `python3 scripts/sync_support_kb.py`. Copy the printed vector store ID into `OPENAI_SUPPORT_VECTOR_STORE_ID`.

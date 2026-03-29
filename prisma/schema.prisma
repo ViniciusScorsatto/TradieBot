@@ -145,6 +145,7 @@ model Ticket {
   type      String
   status    String         @default("OPEN")
   subject   String
+  aiFirstResponseSentAt DateTime? @map("ai_first_response_sent_at")
   createdAt DateTime       @default(now()) @map("created_at")
   updatedAt DateTime       @updatedAt @map("updated_at")
   user      User           @relation(fields: [userId], references: [id], onDelete: Cascade)

@@ -30,7 +30,9 @@ class Repository(Protocol):
     def delete_client(self, user_id: str, client_id: str) -> bool: ...
     def list_history(self, user_id: str) -> list[InvoiceDraft]: ...
     def record_invoice_email(self, user_id: str, invoice_number: str, to_email: str) -> None: ...
-    def record_ticket(self, ticket: SupportTicket) -> None: ...
+    def record_ticket(self, ticket: SupportTicket) -> str: ...
+    def record_ticket_message(self, ticket_id: str, sender: str, body: str, *, mark_ai_first_response: bool = False) -> None: ...
+    def bug_ai_assists_today(self, user_id: str) -> int: ...
     def list_promotion_preferences(self, user_id: str) -> list[str]: ...
     def save_promotion_preferences(self, user_id: str, categories: list[str]) -> None: ...
     def invoice_count_this_month(self, user_id: str) -> int: ...
@@ -58,6 +60,9 @@ class InMemoryRepository:
         self.voice_usage_seconds: DefaultDict[str, int] = defaultdict(int)
         self.stripe_customers: dict[str, str] = {}
         self.tickets: DefaultDict[str, list[SupportTicket]] = defaultdict(list)
+        self.ticket_messages: DefaultDict[str, list[dict[str, Any]]] = defaultdict(list)
+        self.ticket_ai_sent_at: dict[str, datetime] = {}
+        self.ticket_index: dict[str, SupportTicket] = {}
         self.promotion_preferences: DefaultDict[str, set[str]] = defaultdict(set)
 
     def get_or_create_profile(self, user_id: str) -> Profile:
@@ -125,8 +130,28 @@ class InMemoryRepository:
     def list_history(self, user_id: str) -> list[InvoiceDraft]:
         return self.history[user_id]
 
-    def record_ticket(self, ticket: SupportTicket) -> None:
+    def record_ticket(self, ticket: SupportTicket) -> str:
+        ticket_id = str(uuid4())
         self.tickets[ticket.user_id].append(ticket)
+        self.ticket_index[ticket_id] = ticket
+        self.ticket_messages[ticket_id].append({"sender": "telegram_user", "body": ticket.body, "created_at": _utcnow()})
+        return ticket_id
+
+    def record_ticket_message(self, ticket_id: str, sender: str, body: str, *, mark_ai_first_response: bool = False) -> None:
+        self.ticket_messages[ticket_id].append({"sender": sender, "body": body, "created_at": _utcnow()})
+        if mark_ai_first_response:
+            self.ticket_ai_sent_at[ticket_id] = _utcnow()
+
+    def bug_ai_assists_today(self, user_id: str) -> int:
+        now = _utcnow().date()
+        count = 0
+        for ticket_id, sent_at in self.ticket_ai_sent_at.items():
+            if sent_at.date() != now:
+                continue
+            ticket = self.ticket_index.get(ticket_id)
+            if ticket and ticket.user_id == user_id and ticket.kind == "BUG":
+                count += 1
+        return count
 
     def record_invoice_email(self, user_id: str, invoice_number: str, to_email: str) -> None:
         return None
@@ -191,7 +216,7 @@ class PostgresRepository:
             "invoice_draft_items": {"id", "draft_id", "description", "quantity", "unit_price", "discount_cents", "discount_percent", "line_total"},
             "invoices": {"id", "user_id", "client_id", "profile_snapshot", "invoice_number", "template_id", "subtotal_cents", "gst_cents", "total_cents", "emailed_to", "emailed_at"},
             "invoice_items": {"id", "invoice_id", "description", "quantity", "unit_price", "discount_cents", "discount_percent", "line_total"},
-            "tickets": {"id", "user_id", "type", "status", "subject"},
+            "tickets": {"id", "user_id", "type", "status", "subject", "ai_first_response_sent_at"},
             "ticket_messages": {"id", "ticket_id", "sender", "body"},
             "payments": {"id", "user_id", "stripe_session_id", "stripe_payment_id", "purchase_type", "amount_cents", "credits_purchased", "status"},
             "promotion_preferences": {"id", "user_id", "category", "created_at"},
@@ -712,7 +737,7 @@ class PostgresRepository:
                 )
             return history
 
-    def record_ticket(self, ticket: SupportTicket) -> None:
+    def record_ticket(self, ticket: SupportTicket) -> str:
         user = self._ensure_user(ticket.user_id)
         ticket_id = str(uuid4())
         with self._connect() as conn, conn.cursor() as cur:
@@ -731,6 +756,55 @@ class PostgresRepository:
                 (str(uuid4()), ticket_id, "telegram_user", ticket.body),
             )
             conn.commit()
+        return ticket_id
+
+    def record_ticket_message(self, ticket_id: str, sender: str, body: str, *, mark_ai_first_response: bool = False) -> None:
+        with self._connect() as conn, conn.cursor() as cur:
+            cur.execute(
+                """
+                INSERT INTO ticket_messages (id, ticket_id, sender, body)
+                VALUES (%s, %s, %s, %s)
+                """,
+                (str(uuid4()), ticket_id, sender, body),
+            )
+            if mark_ai_first_response:
+                cur.execute(
+                    """
+                    UPDATE tickets
+                    SET ai_first_response_sent_at = NOW(),
+                        updated_at = NOW()
+                    WHERE id = %s AND ai_first_response_sent_at IS NULL
+                    """,
+                    (ticket_id,),
+                )
+            else:
+                cur.execute(
+                    """
+                    UPDATE tickets
+                    SET updated_at = NOW()
+                    WHERE id = %s
+                    """,
+                    (ticket_id,),
+                )
+            conn.commit()
+
+    def bug_ai_assists_today(self, user_id: str) -> int:
+        user = self._ensure_user(user_id)
+        with self._connect() as conn, conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT COUNT(*)::int AS count
+                FROM tickets
+                WHERE user_id = %s
+                  AND type = 'BUG'
+                  AND ai_first_response_sent_at IS NOT NULL
+                  AND DATE(ai_first_response_sent_at AT TIME ZONE 'Pacific/Auckland')
+                      = DATE(NOW() AT TIME ZONE 'Pacific/Auckland')
+                """,
+                (user["id"],),
+            )
+            row = cur.fetchone()
+            return int(row["count"]) if row else 0
 
     def record_invoice_email(self, user_id: str, invoice_number: str, to_email: str) -> None:
         user = self._ensure_user(user_id)

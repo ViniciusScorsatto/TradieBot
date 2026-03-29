@@ -9,6 +9,9 @@ class Settings:
     telegram_token: str
     database_url: str
     openai_api_key: str
+    openai_support_model: str
+    openai_support_vector_store_id: str
+    openai_support_daily_limit: int
     mailjet_api_key: str
     mailjet_secret_key: str
     email_from: str
@@ -33,6 +36,9 @@ class Settings:
             telegram_token=os.getenv("TELEGRAM_TOKEN", ""),
             database_url=os.getenv("DATABASE_URL", ""),
             openai_api_key=os.getenv("OPENAI_API_KEY", ""),
+            openai_support_model=os.getenv("OPENAI_SUPPORT_MODEL", "gpt-4.1-mini"),
+            openai_support_vector_store_id=os.getenv("OPENAI_SUPPORT_VECTOR_STORE_ID", ""),
+            openai_support_daily_limit=int(os.getenv("OPENAI_SUPPORT_DAILY_LIMIT", "3")),
             mailjet_api_key=os.getenv("MAILJET_API_KEY", ""),
             mailjet_secret_key=os.getenv("MAILJET_SECRET_KEY", ""),
             email_from=os.getenv("EMAIL_FROM", ""),

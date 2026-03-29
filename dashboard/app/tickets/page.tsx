@@ -189,6 +189,16 @@ function typeTone(type: TicketListRow["type"]) {
   return "badge ticket-idea";
 }
 
+function senderLabel(sender: string) {
+  if (sender === "admin") {
+    return "Admin";
+  }
+  if (sender === "ai") {
+    return "AI triage";
+  }
+  return "Customer";
+}
+
 export default async function TicketsPage({
   searchParams
 }: {
@@ -324,10 +334,16 @@ export default async function TicketsPage({
                 {messages.map((entry) => (
                   <div
                     key={entry.id}
-                    className={`ticket-bubble ${entry.sender === "admin" ? "admin-bubble" : "user-bubble"}`}
+                    className={`ticket-bubble ${
+                      entry.sender === "admin"
+                        ? "admin-bubble"
+                        : entry.sender == "ai"
+                          ? "ai-bubble"
+                          : "user-bubble"
+                    }`}
                   >
                     <div className="ticket-bubble-head">
-                      <strong>{entry.sender === "admin" ? "Admin" : "Customer"}</strong>
+                      <strong>{senderLabel(entry.sender)}</strong>
                       <span>{entry.createdAt}</span>
                     </div>
                     <p>{entry.body}</p>
