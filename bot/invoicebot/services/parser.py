@@ -152,6 +152,13 @@ def _parse_compact_price_chunks(raw_line: str) -> list[InvoiceItem] | None:
     if re.search(r"\b(?:x|times?|at|each)\b", normalized, flags=re.IGNORECASE):
         return None
 
+    sentence_parts = [part.strip() for part in re.split(r"[.!?]+\s*", normalized) if part.strip()]
+    if len(sentence_parts) >= 2:
+        try:
+            return [_parse_single_line_item(part) for part in sentence_parts]
+        except ValueError:
+            pass
+
     if "," in normalized:
         comma_parts = [part.strip() for part in normalized.split(",") if part.strip()]
         if len(comma_parts) >= 2:
