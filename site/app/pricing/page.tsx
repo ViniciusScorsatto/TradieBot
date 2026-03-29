@@ -1,7 +1,7 @@
 import { pricing, siteConfig } from "@invoicebot/shared";
 
 function checkoutMessage(checkout?: string, type?: string) {
-  const target = type === "voice" ? "voice credits" : "invoice credits";
+  const target = type === "voice" ? "voice minutes" : "invoice credits";
   if (checkout === "success") {
     return {
       tone: "success",
@@ -42,7 +42,7 @@ export default function PricingPage({
           <div className="priceValue">{pricing.freeInvoicesPerMonth}</div>
           <p>
             Every business gets {pricing.freeInvoicesPerMonth} invoices per month plus{" "}
-            {pricing.freeVoiceTranscriptionsPerMonth} free voice transcriptions up to {pricing.voiceNoteMaxSeconds} seconds each
+            {pricing.freeVoiceMinutesPerMonth} free voice minutes up to {pricing.voiceNoteMaxSeconds} seconds per note
             before any payment is required.
           </p>
         </article>
@@ -51,14 +51,14 @@ export default function PricingPage({
           <div className="priceValue">NZD ${pricing.paidBlockPriceNzd}</div>
           <p>
             Unlock another {pricing.paidBlockSize} invoices whenever you hit the monthly limit.
-            Voice is positioned as a premium-metered feature after the free allowance.
+            Voice is positioned as a premium-metered feature after the free allowance, sold in minute bundles.
           </p>
           <div className="pricingActions">
             <a className="cta" href={siteConfig.botDeepLink} target="_blank" rel="noreferrer">
               Buy {pricing.paidBlockSize} invoices in Telegram
             </a>
             <a className="secondary" href={siteConfig.botDeepLink} target="_blank" rel="noreferrer">
-              Buy 100 voice notes in Telegram
+              Buy {pricing.paidVoiceMinutesBlock} voice minutes in Telegram
             </a>
           </div>
           <p className="pricingHint">

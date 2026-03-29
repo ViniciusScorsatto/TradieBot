@@ -24,10 +24,10 @@ def parse_args() -> argparse.Namespace:
         help="Value to set for invoice_count_this_month (default: 0)",
     )
     parser.add_argument(
-        "--voice-count",
+        "--voice-minutes",
         type=int,
         default=0,
-        help="Value to set for voice_transcriptions_this_month (default: 0)",
+        help="Value to set for voice_seconds_this_month, expressed in minutes (default: 0)",
     )
     parser.add_argument(
         "--paid-invoice-credits",
@@ -36,10 +36,10 @@ def parse_args() -> argparse.Namespace:
         help="Value to set for paid_invoice_credits (default: 0)",
     )
     parser.add_argument(
-        "--paid-voice-credits",
+        "--paid-voice-minutes",
         type=int,
         default=0,
-        help="Value to set for paid_voice_credits (default: 0)",
+        help="Value to set for paid_voice_seconds, expressed in minutes (default: 0)",
     )
     return parser.parse_args()
 
@@ -55,19 +55,19 @@ def main() -> None:
             """
             UPDATE users
             SET invoice_count_this_month = %s,
-                voice_transcriptions_this_month = %s,
+                voice_seconds_this_month = %s,
                 paid_invoice_credits = %s,
-                paid_voice_credits = %s,
+                paid_voice_seconds = %s,
                 updated_at = NOW()
             WHERE telegram_user_id = %s
-            RETURNING telegram_user_id, invoice_count_this_month, voice_transcriptions_this_month,
-                      paid_invoice_credits, paid_voice_credits
+            RETURNING telegram_user_id, invoice_count_this_month, voice_seconds_this_month,
+                      paid_invoice_credits, paid_voice_seconds
             """,
             (
                 args.invoice_count,
-                args.voice_count,
+                args.voice_minutes * 60,
                 args.paid_invoice_credits,
-                args.paid_voice_credits,
+                args.paid_voice_minutes * 60,
                 args.telegram_user_id,
             ),
         )
@@ -80,9 +80,9 @@ def main() -> None:
     print("Updated test user:")
     print(f"  telegram_user_id: {row[0]}")
     print(f"  invoice_count_this_month: {row[1]}")
-    print(f"  voice_transcriptions_this_month: {row[2]}")
+    print(f"  voice_seconds_this_month: {row[2]} ({row[2] / 60:.1f} min)")
     print(f"  paid_invoice_credits: {row[3]}")
-    print(f"  paid_voice_credits: {row[4]}")
+    print(f"  paid_voice_seconds: {row[4]} ({row[4] / 60:.1f} min)")
 
 
 if __name__ == "__main__":

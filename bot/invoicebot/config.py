@@ -22,8 +22,8 @@ class Settings:
     warning_threshold: int = 8
     free_invoice_limit: int = 10
     paid_invoice_block: int = 20
-    paid_voice_block: int = 100
-    free_voice_transcriptions_per_month: int = 20
+    paid_voice_minutes: int = 100
+    free_voice_minutes_per_month: int = 20
     voice_note_max_seconds: int = 60
 
     @classmethod
@@ -53,7 +53,9 @@ class Settings:
             warning_threshold=int(os.getenv("WARNING_THRESHOLD", "8")),
             free_invoice_limit=int(os.getenv("FREE_INVOICE_LIMIT", "10")),
             paid_invoice_block=int(os.getenv("PAID_INVOICE_BLOCK", "20")),
-            paid_voice_block=int(os.getenv("PAID_VOICE_BLOCK", "100")),
-            free_voice_transcriptions_per_month=int(os.getenv("FREE_VOICE_TRANSCRIPTIONS_PER_MONTH", "20")),
+            paid_voice_minutes=int(os.getenv("PAID_VOICE_MINUTES", os.getenv("PAID_VOICE_BLOCK", "100"))),
+            free_voice_minutes_per_month=int(
+                os.getenv("FREE_VOICE_MINUTES_PER_MONTH", os.getenv("FREE_VOICE_TRANSCRIPTIONS_PER_MONTH", "20"))
+            ),
             voice_note_max_seconds=int(os.getenv("VOICE_NOTE_MAX_SECONDS", "60")),
         )

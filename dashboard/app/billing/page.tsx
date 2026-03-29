@@ -10,7 +10,7 @@ export default function BillingPage() {
           Monitor quota unlocks, recent payments, and where failed checkouts need follow-up.
           The product keeps the pricing simple: {pricing.freeInvoicesPerMonth} free invoices,
           then NZD ${pricing.paidBlockPriceNzd} for each extra block of {pricing.paidBlockSize}. Voice
-          starts with {pricing.freeVoiceTranscriptionsPerMonth} free transcriptions per month and should be
+          starts with {pricing.freeVoiceMinutesPerMonth} free voice minutes per month and should be
           treated as a premium-metered feature.
         </p>
       </section>

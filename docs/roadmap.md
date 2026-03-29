@@ -23,7 +23,7 @@ Voice is a core differentiator, but it should not be an unlimited free feature.
 - Only allow transcription during an active invoice session
 - Cap each voice note to `60` seconds
 - Reject oversized or unsupported audio uploads
-- Rate-limit voice transcriptions per user
+- Rate-limit voice minutes per user
 - Track monthly voice usage separately from invoice quota
 - Surface voice usage in the admin dashboard
 
@@ -35,6 +35,7 @@ Voice is a core differentiator, but it should not be an unlimited free feature.
 
 ## Suggested First Numbers
 
-- `20` free voice transcriptions per month
+- `20` free voice minutes per month
+- `100` paid voice minutes per top-up
 - `60` seconds maximum per voice note
 - Text entry remains available even when voice allowance is exhausted

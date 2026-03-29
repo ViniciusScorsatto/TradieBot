@@ -34,11 +34,11 @@ class Repository(Protocol):
     def save_promotion_preferences(self, user_id: str, categories: list[str]) -> None: ...
     def invoice_count_this_month(self, user_id: str) -> int: ...
     def paid_credits(self, user_id: str) -> int: ...
-    def paid_voice_credits(self, user_id: str) -> int: ...
-    def voice_count_this_month(self, user_id: str) -> int: ...
-    def increment_voice_usage(self, user_id: str) -> None: ...
+    def paid_voice_seconds(self, user_id: str) -> int: ...
+    def voice_seconds_this_month(self, user_id: str) -> int: ...
+    def increment_voice_usage(self, user_id: str, seconds: int) -> None: ...
     def consume_paid_credit_if_needed(self, user_id: str, free_limit: int) -> None: ...
-    def consume_paid_voice_credit_if_needed(self, user_id: str, free_limit: int) -> None: ...
+    def consume_paid_voice_credit_if_needed(self, user_id: str, free_limit_seconds: int, seconds_used: int) -> None: ...
     def stripe_customer_id(self, user_id: str) -> str | None: ...
     def save_stripe_customer_id(self, user_id: str, customer_id: str) -> None: ...
 
@@ -53,8 +53,8 @@ class InMemoryRepository:
         self.history: DefaultDict[str, list[InvoiceDraft]] = defaultdict(list)
         self.invoice_counts: DefaultDict[str, int] = defaultdict(int)
         self.credits: DefaultDict[str, int] = defaultdict(int)
-        self.voice_credits: DefaultDict[str, int] = defaultdict(int)
-        self.voice_counts: DefaultDict[str, int] = defaultdict(int)
+        self.voice_seconds_credits: DefaultDict[str, int] = defaultdict(int)
+        self.voice_usage_seconds: DefaultDict[str, int] = defaultdict(int)
         self.stripe_customers: dict[str, str] = {}
         self.tickets: DefaultDict[str, list[SupportTicket]] = defaultdict(list)
         self.promotion_preferences: DefaultDict[str, set[str]] = defaultdict(set)
@@ -139,22 +139,24 @@ class InMemoryRepository:
     def paid_credits(self, user_id: str) -> int:
         return self.credits[user_id]
 
-    def paid_voice_credits(self, user_id: str) -> int:
-        return self.voice_credits[user_id]
+    def paid_voice_seconds(self, user_id: str) -> int:
+        return self.voice_seconds_credits[user_id]
 
-    def voice_count_this_month(self, user_id: str) -> int:
-        return self.voice_counts[user_id]
+    def voice_seconds_this_month(self, user_id: str) -> int:
+        return self.voice_usage_seconds[user_id]
 
-    def increment_voice_usage(self, user_id: str) -> None:
-        self.voice_counts[user_id] += 1
+    def increment_voice_usage(self, user_id: str, seconds: int) -> None:
+        self.voice_usage_seconds[user_id] += max(seconds, 0)
 
     def consume_paid_credit_if_needed(self, user_id: str, free_limit: int) -> None:
         if self.invoice_counts[user_id] > free_limit and self.credits[user_id] > 0:
             self.credits[user_id] -= 1
 
-    def consume_paid_voice_credit_if_needed(self, user_id: str, free_limit: int) -> None:
-        if self.voice_counts[user_id] > free_limit and self.voice_credits[user_id] > 0:
-            self.voice_credits[user_id] -= 1
+    def consume_paid_voice_credit_if_needed(self, user_id: str, free_limit_seconds: int, seconds_used: int) -> None:
+        total_used = self.voice_usage_seconds[user_id]
+        newly_chargeable = max(total_used - free_limit_seconds, 0) - max(total_used - max(seconds_used, 0) - free_limit_seconds, 0)
+        if newly_chargeable > 0 and self.voice_seconds_credits[user_id] > 0:
+            self.voice_seconds_credits[user_id] = max(self.voice_seconds_credits[user_id] - newly_chargeable, 0)
 
     def stripe_customer_id(self, user_id: str) -> str | None:
         return self.stripe_customers.get(user_id)
@@ -178,7 +180,7 @@ class PostgresRepository:
 
     def ensure_schema(self) -> None:
         required_columns = {
-            "users": {"id", "telegram_user_id", "invoice_count_this_month", "voice_transcriptions_this_month", "paid_invoice_credits", "paid_voice_credits"},
+            "users": {"id", "telegram_user_id", "invoice_count_this_month", "voice_seconds_this_month", "paid_invoice_credits", "paid_voice_seconds"},
             "profiles": {"id", "user_id", "address", "default_template_id", "next_invoice_number"},
             "clients": {"id", "user_id", "name", "address"},
             "invoice_drafts": {"id", "user_id", "client_id", "status", "subtotal_cents", "gst_cents", "total_cents"},
@@ -769,31 +771,31 @@ class PostgresRepository:
             row = cur.fetchone()
             return int(row["paid_invoice_credits"]) if row else 0
 
-    def paid_voice_credits(self, user_id: str) -> int:
+    def paid_voice_seconds(self, user_id: str) -> int:
         user = self._ensure_user(user_id)
         with self._connect() as conn, conn.cursor() as cur:
-            cur.execute("SELECT paid_voice_credits FROM users WHERE id = %s", (user["id"],))
+            cur.execute("SELECT paid_voice_seconds FROM users WHERE id = %s", (user["id"],))
             row = cur.fetchone()
-            return int(row["paid_voice_credits"]) if row else 0
+            return int(row["paid_voice_seconds"]) if row else 0
 
-    def voice_count_this_month(self, user_id: str) -> int:
+    def voice_seconds_this_month(self, user_id: str) -> int:
         user = self._ensure_user(user_id)
         with self._connect() as conn, conn.cursor() as cur:
-            cur.execute("SELECT voice_transcriptions_this_month FROM users WHERE id = %s", (user["id"],))
+            cur.execute("SELECT voice_seconds_this_month FROM users WHERE id = %s", (user["id"],))
             row = cur.fetchone()
-            return int(row["voice_transcriptions_this_month"]) if row else 0
+            return int(row["voice_seconds_this_month"]) if row else 0
 
-    def increment_voice_usage(self, user_id: str) -> None:
+    def increment_voice_usage(self, user_id: str, seconds: int) -> None:
         user = self._ensure_user(user_id)
         with self._connect() as conn, conn.cursor() as cur:
             cur.execute(
                 """
                 UPDATE users
-                SET voice_transcriptions_this_month = voice_transcriptions_this_month + 1,
+                SET voice_seconds_this_month = voice_seconds_this_month + %s,
                     updated_at = NOW()
                 WHERE id = %s
                 """,
-                (user["id"],),
+                (max(seconds, 0), user["id"]),
             )
             conn.commit()
 
@@ -816,22 +818,31 @@ class PostgresRepository:
                 )
                 conn.commit()
 
-    def consume_paid_voice_credit_if_needed(self, user_id: str, free_limit: int) -> None:
+    def consume_paid_voice_credit_if_needed(self, user_id: str, free_limit_seconds: int, seconds_used: int) -> None:
         user = self._ensure_user(user_id)
         with self._connect() as conn, conn.cursor() as cur:
             cur.execute(
-                "SELECT voice_transcriptions_this_month, paid_voice_credits FROM users WHERE id = %s",
+                "SELECT voice_seconds_this_month, paid_voice_seconds FROM users WHERE id = %s",
                 (user["id"],),
             )
             row = cur.fetchone()
-            if row and int(row["voice_transcriptions_this_month"]) > free_limit and int(row["paid_voice_credits"]) > 0:
+            if row:
+                total_used = int(row["voice_seconds_this_month"])
+                available_paid = int(row["paid_voice_seconds"])
+                newly_chargeable = max(total_used - free_limit_seconds, 0) - max(
+                    total_used - max(seconds_used, 0) - free_limit_seconds, 0
+                )
+            else:
+                newly_chargeable = 0
+                available_paid = 0
+            if newly_chargeable > 0 and available_paid > 0:
                 cur.execute(
                     """
                     UPDATE users
-                    SET paid_voice_credits = paid_voice_credits - 1, updated_at = NOW()
+                    SET paid_voice_seconds = GREATEST(paid_voice_seconds - %s, 0), updated_at = NOW()
                     WHERE id = %s
                     """,
-                    (user["id"],),
+                    (newly_chargeable, user["id"]),
                 )
                 conn.commit()
 
@@ -862,9 +873,9 @@ class PostgresRepository:
                 """
                 UPDATE users
                 SET invoice_count_this_month = 0,
-                    voice_transcriptions_this_month = 0,
+                    voice_seconds_this_month = 0,
                     updated_at = NOW()
-                WHERE invoice_count_this_month <> 0 OR voice_transcriptions_this_month <> 0
+                WHERE invoice_count_this_month <> 0 OR voice_seconds_this_month <> 0
                 """
             )
             updated = cur.rowcount

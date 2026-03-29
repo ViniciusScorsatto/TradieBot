@@ -75,16 +75,17 @@ async function fulfillCheckout(session: Stripe.Checkout.Session) {
   }
 
   if (purchaseType === "voice") {
+    const purchasedSeconds = creditsPurchased * 60;
     await prisma.$executeRaw`
       UPDATE users
-      SET paid_voice_credits = paid_voice_credits + ${creditsPurchased},
+      SET paid_voice_seconds = paid_voice_seconds + ${purchasedSeconds},
           plan_tier = 'PAID',
           updated_at = NOW()
       WHERE id = ${userId}
     `;
     await sendTelegramMessage(
       String(telegramUserId),
-      `Payment received. ${creditsPurchased} voice notes have been added to your account. You can keep invoicing by voice now.`
+      `Payment received. ${creditsPurchased} voice minutes have been added to your account. You can keep invoicing by voice now.`
     );
     return { ok: true, action: "unlock_voice_credits" };
   }

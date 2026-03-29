@@ -98,7 +98,7 @@ export default async function DashboardHome() {
             Free plan includes {dashboardCopy.pricing.freeInvoicesPerMonth} invoices per month.
             Warn at {dashboardCopy.pricing.warningThreshold}, then sell another block of{" "}
             {dashboardCopy.pricing.paidBlockSize} for NZD ${dashboardCopy.pricing.paidBlockPriceNzd}. Voice starts with{" "}
-            {dashboardCopy.pricing.freeVoiceTranscriptionsPerMonth} free transcriptions and should later be monetized separately.
+            {dashboardCopy.pricing.freeVoiceMinutesPerMonth} free voice minutes and can be topped up in minute bundles.
           </p>
           <table className="table">
             <thead>

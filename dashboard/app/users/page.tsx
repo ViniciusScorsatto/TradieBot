@@ -11,12 +11,20 @@ type AdminUserRow = {
   plan: string;
   invoiceCount: number;
   paidInvoiceCredits: number;
-  voiceCount: number;
-  paidVoiceCredits: number;
+  voiceSeconds: number;
+  paidVoiceSeconds: number;
   joinedAt: string;
   templateId: string;
   stripeCustomerId: string | null;
 };
+
+function formatMinutes(seconds: number) {
+  const minutes = Math.max(seconds, 0) / 60;
+  if (Number.isInteger(minutes)) {
+    return `${minutes} min`;
+  }
+  return `${minutes.toFixed(1)} min`;
+}
 
 async function loadUsers(): Promise<AdminUserRow[]> {
   try {
@@ -28,8 +36,8 @@ async function loadUsers(): Promise<AdminUserRow[]> {
         u.plan_tier AS plan,
         u.invoice_count_this_month AS "invoiceCount",
         COALESCE(u.paid_invoice_credits, 0) AS "paidInvoiceCredits",
-        COALESCE(u.voice_transcriptions_this_month, 0) AS "voiceCount",
-        COALESCE(u.paid_voice_credits, 0) AS "paidVoiceCredits",
+        COALESCE(u.voice_seconds_this_month, 0) AS "voiceSeconds",
+        COALESCE(u.paid_voice_seconds, 0) AS "paidVoiceSeconds",
         TO_CHAR(u.joined_at, 'YYYY-MM-DD') AS "joinedAt",
         COALESCE(p.default_template_id, 'classic-blue') AS "templateId",
         u.stripe_customer_id AS "stripeCustomerId"
@@ -54,12 +62,12 @@ async function resetVoiceUsage(formData: FormData) {
 
   await prisma.$executeRaw`
     UPDATE users
-    SET voice_transcriptions_this_month = 0,
+    SET voice_seconds_this_month = 0,
         updated_at = NOW()
     WHERE id = ${userId}
   `;
   revalidatePath("/users");
-  redirect(`/users?message=${encodeURIComponent(`Voice usage reset for ${userName}`)}`);
+  redirect(`/users?message=${encodeURIComponent(`Voice minutes reset for ${userName}`)}`);
 }
 
 async function resetInvoiceCount(formData: FormData) {
@@ -113,12 +121,12 @@ async function addVoiceCredits(formData: FormData) {
 
   await prisma.$executeRaw`
     UPDATE users
-    SET paid_voice_credits = paid_voice_credits + ${Math.floor(amount)},
+    SET paid_voice_seconds = paid_voice_seconds + ${Math.floor(amount) * 60},
         updated_at = NOW()
     WHERE id = ${userId}
   `;
   revalidatePath("/users");
-  redirect(`/users?message=${encodeURIComponent(`Added ${Math.floor(amount)} voice credits to ${userName}`)}`);
+  redirect(`/users?message=${encodeURIComponent(`Added ${Math.floor(amount)} voice minutes to ${userName}`)}`);
 }
 
 export default async function UsersPage({
@@ -130,8 +138,8 @@ export default async function UsersPage({
   const message = searchParams?.message;
   const freeInvoiceLimit = Number(process.env.FREE_INVOICE_LIMIT ?? "10");
   const paidInvoiceBlock = Number(process.env.PAID_INVOICE_BLOCK ?? "20");
-  const freeVoiceLimit = Number(process.env.FREE_VOICE_TRANSCRIPTIONS_PER_MONTH ?? "20");
-  const paidVoiceBlock = Number(process.env.PAID_VOICE_BLOCK ?? "100");
+  const freeVoiceLimit = Number(process.env.FREE_VOICE_MINUTES_PER_MONTH ?? process.env.FREE_VOICE_TRANSCRIPTIONS_PER_MONTH ?? "20");
+  const paidVoiceBlock = Number(process.env.PAID_VOICE_MINUTES ?? process.env.PAID_VOICE_BLOCK ?? "100");
   return (
     <div className="stack">
       <section className="hero-card">
@@ -142,7 +150,7 @@ export default async function UsersPage({
         </p>
         <p>
           Current environment: {freeInvoiceLimit} free invoices, +{paidInvoiceBlock} invoices per paid block,
-          {freeVoiceLimit} free voice notes, +{paidVoiceBlock} voice notes per paid block.
+          {freeVoiceLimit} free voice minutes, +{paidVoiceBlock} voice minutes per paid block.
         </p>
       </section>
 
@@ -177,7 +185,7 @@ export default async function UsersPage({
             ) : users.map((user) => {
               const template = invoiceTemplates.find((item) => item.id === user.templateId);
               const freeInvoicesLeft = Math.max(freeInvoiceLimit - user.invoiceCount, 0);
-              const freeVoiceLeft = Math.max(freeVoiceLimit - user.voiceCount, 0);
+              const freeVoiceLeftSeconds = Math.max(freeVoiceLimit * 60 - user.voiceSeconds, 0);
               return (
                 <tr key={user.id}>
                   <td>{user.name}</td>
@@ -185,8 +193,8 @@ export default async function UsersPage({
                   <td>{user.plan}</td>
                   <td>{user.invoiceCount}</td>
                   <td>{freeInvoicesLeft} free left, {user.paidInvoiceCredits} paid</td>
-                  <td>{user.voiceCount}</td>
-                  <td>{freeVoiceLeft} free left, {user.paidVoiceCredits} paid</td>
+                  <td>{formatMinutes(user.voiceSeconds)}</td>
+                  <td>{formatMinutes(freeVoiceLeftSeconds)} free left, {formatMinutes(user.paidVoiceSeconds)} paid</td>
                   <td>{template?.name ?? user.templateId}</td>
                   <td>{user.stripeCustomerId ?? "Not linked"}</td>
                   <td>
@@ -203,9 +211,9 @@ export default async function UsersPage({
                             min={1}
                             step={1}
                             defaultValue={paidVoiceBlock}
-                            aria-label={`Voice credits for ${user.name}`}
+                            aria-label={`Voice minutes for ${user.name}`}
                           />
-                          <ActionButton label="Add Voice" />
+                          <ActionButton label="Add Minutes" />
                         </form>
                         <form action={addInvoiceCredits} className="credit-form">
                           <input type="hidden" name="userId" value={user.id} />

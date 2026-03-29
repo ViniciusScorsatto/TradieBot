@@ -216,6 +216,13 @@ def _voice_limit_keyboard(settings) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(rows)
 
 
+def _format_minutes_from_seconds(seconds: int) -> str:
+    minutes = max(seconds, 0) / 60
+    if minutes.is_integer():
+        return f"{int(minutes)}"
+    return f"{minutes:.1f}"
+
+
 def _skip_keyboard(step: str, *, label: str = "Skip") -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup([[InlineKeyboardButton(label, callback_data=f"skip_step:{step}")]])
 
@@ -560,11 +567,11 @@ async def _send_checkout_prompt(
 
     if purchase_type == "voice":
         price_id = settings.stripe_voice_price_id
-        credits_purchased = settings.paid_voice_block
-        button_label = f"Pay NZD $5 for {credits_purchased} voice notes"
+        credits_purchased = settings.paid_voice_minutes
+        button_label = f"Pay NZD $5 for {credits_purchased} voice minutes"
         body = (
-            "Unlock more voice transcriptions with a secure Stripe checkout.\n\n"
-            f"This purchase adds {credits_purchased} voice notes to your account."
+            "Unlock more voice time with a secure Stripe checkout.\n\n"
+            f"This purchase adds {credits_purchased} voice minutes to your account."
         )
     else:
         price_id = settings.stripe_invoice_price_id
@@ -1286,12 +1293,22 @@ async def _handle_voice_message(update: Update, context: ContextTypes.DEFAULT_TY
         )
         return
 
-    used = repo.voice_count_this_month(user_id)
-    paid_voice_credits = repo.paid_voice_credits(user_id)
-    if used >= settings.free_voice_transcriptions_per_month and paid_voice_credits <= 0:
+    used_seconds = repo.voice_seconds_this_month(user_id)
+    paid_voice_seconds = repo.paid_voice_seconds(user_id)
+    free_voice_seconds = settings.free_voice_minutes_per_month * 60
+    remaining_seconds = max(free_voice_seconds - used_seconds, 0) + paid_voice_seconds
+    if duration > remaining_seconds:
         await message.reply_text(
-            "You’ve used your free monthly voice transcriptions.\n\n"
-            "You can keep going by typing the line items, or unlock more voice transcriptions to keep invoicing by voice.",
+            "That voice note is longer than the voice time you have left right now.\n\n"
+            f"You currently have about {_format_minutes_from_seconds(remaining_seconds)} voice minutes available.\n\n"
+            "Send a shorter note, type the line items, or unlock more voice minutes.",
+            reply_markup=_voice_limit_keyboard(settings),
+        )
+        return
+    if used_seconds >= free_voice_seconds and paid_voice_seconds <= 0:
+        await message.reply_text(
+            "You’ve used your free monthly voice minutes.\n\n"
+            f"You can keep going by typing the line items, or unlock more voice minutes to keep invoicing by voice.",
             reply_markup=_voice_limit_keyboard(settings),
         )
         return
@@ -1316,8 +1333,8 @@ async def _handle_voice_message(update: Update, context: ContextTypes.DEFAULT_TY
         start_index = len(draft.items)
         draft.items.extend(new_items)
         repo.save_draft(draft)
-        repo.increment_voice_usage(user_id)
-        repo.consume_paid_voice_credit_if_needed(user_id, settings.free_voice_transcriptions_per_month)
+        repo.increment_voice_usage(user_id, duration)
+        repo.consume_paid_voice_credit_if_needed(user_id, free_voice_seconds, duration)
         lines = "\n".join(
             _item_line(item, start_index + offset) for offset, item in enumerate(new_items)
         )
