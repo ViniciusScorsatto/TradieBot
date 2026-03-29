@@ -102,10 +102,12 @@ This is the practical baseline checklist for getting InvoiceBot into a reasonabl
 - Admin user data export tooling
 - Admin user data deletion tooling
 - Minimized invoice activity list exposure in the admin dashboard
+- Retention policy document
+- Daily cleanup job for stale drafts and other non-essential data
+- Internal breach-response playbook
 
 ### Still to implement
 
-- Internal retention workflow
 - Formal subprocessors register page or section
 - Full admin 2FA enrollment flow with recovery codes
 - Role-based admin access if multiple operators need different permissions

@@ -92,6 +92,9 @@ Set these at the project level if multiple services need them:
 - `PAID_VOICE_MINUTES`
 - `FREE_VOICE_MINUTES_PER_MONTH`
 - `VOICE_NOTE_MAX_SECONDS`
+- `DRAFT_RETENTION_DAYS`
+- `CLOSED_TICKET_RETENTION_DAYS`
+- `PROMOTION_DELIVERY_RETENTION_DAYS`
 - `ADMIN_EMAIL`
 - `ADMIN_PASSWORD_HASH`
 - `ADMIN_TOTP_SECRET`
@@ -149,6 +152,9 @@ Set these at the project level if multiple services need them:
 ### Quota Reset
 
 - `DATABASE_URL`
+- `DRAFT_RETENTION_DAYS`
+- `CLOSED_TICKET_RETENTION_DAYS`
+- `PROMOTION_DELIVERY_RETENTION_DAYS`
 
 ## Notes
 
@@ -170,3 +176,4 @@ Set these at the project level if multiple services need them:
 - To grant Telegram admin privileges, set `ADMIN_TELEGRAM_USER_IDS` on the bot service as a comma-separated list like `123456789`.
 - Set `APP_ENV=staging` on your staging bot and `APP_ENV=production` on production. The `/mockclients` command is automatically blocked in production.
 - To build the AI bug-triage knowledge base, curate markdown articles in `/docs/support-kb/bugs` and run `python3 scripts/sync_support_kb.py`. Copy the printed vector store ID into `OPENAI_SUPPORT_VECTOR_STORE_ID`.
+- The daily quota-reset cron also performs retention cleanup. Retention defaults are documented in [docs/retention-policy.md](/Users/viniciusscorsatto/Desktop/AI%20Projects/Nz%20Fuel/docs/retention-policy.md).
