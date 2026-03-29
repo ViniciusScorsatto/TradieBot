@@ -56,7 +56,7 @@ BT
 1 0 0 1 54 113 Tm (- `/history` and `/repeat`) Tj
 1 0 0 1 54 98 Tm (- `/support` support ticket creation) Tj
 1 0 0 1 54 83 Tm (- `/promotions` affiliate marketing preference selection) Tj
-1 0 0 1 54 38 Tm (InvoiceBot Project Dossier  |  Page 1 of 5) Tj
+1 0 0 1 54 38 Tm (InvoiceBot Project Dossier  |  Page 1 of 6) Tj
 ET
 endstream
 endobj
@@ -116,7 +116,7 @@ BT
 1 0 0 1 54 113 Tm (  - delete user data) Tj
 1 0 0 1 54 98 Tm (- invoices page with recent invoice activity) Tj
 1 0 0 1 54 83 Tm (- tickets page with live support queue and reply flow) Tj
-1 0 0 1 54 38 Tm (InvoiceBot Project Dossier  |  Page 2 of 5) Tj
+1 0 0 1 54 38 Tm (InvoiceBot Project Dossier  |  Page 2 of 6) Tj
 ET
 endstream
 endobj
@@ -176,7 +176,7 @@ BT
 1 0 0 1 54 113 Tm () Tj
 1 0 0 1 54 98 Tm () Tj
 1 0 0 1 54 83 Tm (This project is not automatically ?certified compliant,? but it has a solid baseline for) Tj
-1 0 0 1 54 38 Tm (InvoiceBot Project Dossier  |  Page 3 of 5) Tj
+1 0 0 1 54 38 Tm (InvoiceBot Project Dossier  |  Page 3 of 6) Tj
 ET
 endstream
 endobj
@@ -184,7 +184,7 @@ endobj
 << /Type /Page /Parent 3 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 1 0 R >> >> /Contents 6 0 R >>
 endobj
 8 0 obj
-<< /Length 2511 >>
+<< /Length 2679 >>
 stream
 BT
 /F1 11 Tf
@@ -204,39 +204,39 @@ BT
 1 0 0 1 54 593 Tm (- formal subprocessors register section) Tj
 1 0 0 1 54 578 Tm (- documented internal breach-response process) Tj
 1 0 0 1 54 563 Tm (- role-based access control if more than one operator will use the dashboard) Tj
-1 0 0 1 54 548 Tm (- legal review of privacy policy / terms before public launch) Tj
-1 0 0 1 54 533 Tm () Tj
-1 0 0 1 54 518 Tm () Tj
-1 0 0 1 54 503 Tm (INFRASTRUCTURE) Tj
+1 0 0 1 54 548 Tm (- legal review of privacy policy / terms before public launch, especially for New) Tj
+1 0 0 1 54 533 Tm (  Zealand Privacy Act 2020 obligations) Tj
+1 0 0 1 54 518 Tm (- legal review of affiliate / promotion consent flows before public launch under the) Tj
+1 0 0 1 54 503 Tm (  Unsolicited Electronic Messages Act 2007) Tj
 1 0 0 1 54 488 Tm () Tj
 1 0 0 1 54 473 Tm () Tj
-1 0 0 1 54 458 Tm (- Railway for deployment) Tj
-1 0 0 1 54 443 Tm (- PostgreSQL as primary database) Tj
-1 0 0 1 54 428 Tm (- Prisma schema and migrations as database source of truth) Tj
-1 0 0 1 54 413 Tm (- Python Telegram bot worker) Tj
-1 0 0 1 54 398 Tm (- Next.js dashboard and site) Tj
-1 0 0 1 54 383 Tm (- OpenAI for transcription) Tj
-1 0 0 1 54 368 Tm (- Stripe for payments) Tj
-1 0 0 1 54 353 Tm (- Mailjet for invoice email delivery) Tj
-1 0 0 1 54 338 Tm () Tj
-1 0 0 1 54 323 Tm () Tj
-1 0 0 1 54 308 Tm (OPERATIONAL NOTES) Tj
+1 0 0 1 54 458 Tm (INFRASTRUCTURE) Tj
+1 0 0 1 54 443 Tm () Tj
+1 0 0 1 54 428 Tm () Tj
+1 0 0 1 54 413 Tm (- Railway for deployment) Tj
+1 0 0 1 54 398 Tm (- PostgreSQL as primary database) Tj
+1 0 0 1 54 383 Tm (- Prisma schema and migrations as database source of truth) Tj
+1 0 0 1 54 368 Tm (- Python Telegram bot worker) Tj
+1 0 0 1 54 353 Tm (- Next.js dashboard and site) Tj
+1 0 0 1 54 338 Tm (- OpenAI for transcription) Tj
+1 0 0 1 54 323 Tm (- Stripe for payments) Tj
+1 0 0 1 54 308 Tm (- Mailjet for invoice email delivery) Tj
 1 0 0 1 54 293 Tm () Tj
 1 0 0 1 54 278 Tm () Tj
-1 0 0 1 54 263 Tm (- safest schema deploy order:) Tj
-1 0 0 1 54 248 Tm (  1. deploy dashboard so Prisma migrations run) Tj
-1 0 0 1 54 233 Tm (  2. deploy bot) Tj
-1 0 0 1 54 218 Tm (  3. deploy other dependent services) Tj
-1 0 0 1 54 203 Tm (- paid credits roll over; monthly reset only clears free usage counters) Tj
-1 0 0 1 54 188 Tm (- staging can use different free-tier env values for testing) Tj
-1 0 0 1 54 173 Tm (- the bot can be locked to approved testers) Tj
-1 0 0 1 54 158 Tm () Tj
-1 0 0 1 54 143 Tm () Tj
-1 0 0 1 54 128 Tm (IMPORTANT ENVIRONMENT VARIABLES) Tj
+1 0 0 1 54 263 Tm (OPERATIONAL NOTES) Tj
+1 0 0 1 54 248 Tm () Tj
+1 0 0 1 54 233 Tm () Tj
+1 0 0 1 54 218 Tm (- safest schema deploy order:) Tj
+1 0 0 1 54 203 Tm (  1. deploy dashboard so Prisma migrations run) Tj
+1 0 0 1 54 188 Tm (  2. deploy bot) Tj
+1 0 0 1 54 173 Tm (  3. deploy other dependent services) Tj
+1 0 0 1 54 158 Tm (- paid credits roll over; monthly reset only clears free usage counters) Tj
+1 0 0 1 54 143 Tm (- staging can use different free-tier env values for testing) Tj
+1 0 0 1 54 128 Tm (- the bot can be locked to approved testers) Tj
 1 0 0 1 54 113 Tm () Tj
 1 0 0 1 54 98 Tm () Tj
-1 0 0 1 54 83 Tm (- `DATABASE_URL`) Tj
-1 0 0 1 54 38 Tm (InvoiceBot Project Dossier  |  Page 4 of 5) Tj
+1 0 0 1 54 83 Tm (IMPORTANT ENVIRONMENT VARIABLES) Tj
+1 0 0 1 54 38 Tm (InvoiceBot Project Dossier  |  Page 4 of 6) Tj
 ET
 endstream
 endobj
@@ -244,44 +244,59 @@ endobj
 << /Type /Page /Parent 3 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 1 0 R >> >> /Contents 8 0 R >>
 endobj
 10 0 obj
-<< /Length 1632 >>
+<< /Length 2508 >>
 stream
 BT
 /F1 11 Tf
-1 0 0 1 54 788 Tm (- `TELEGRAM_TOKEN`) Tj
-1 0 0 1 54 773 Tm (- `OPENAI_API_KEY`) Tj
-1 0 0 1 54 758 Tm (- `MAILJET_API_KEY`) Tj
-1 0 0 1 54 743 Tm (- `MAILJET_SECRET_KEY`) Tj
-1 0 0 1 54 728 Tm (- `EMAIL_FROM`) Tj
-1 0 0 1 54 713 Tm (- `STRIPE_SECRET_KEY`) Tj
-1 0 0 1 54 698 Tm (- `STRIPE_WEBHOOK_SECRET`) Tj
-1 0 0 1 54 683 Tm (- `STRIPE_INVOICE_PRICE_ID`) Tj
-1 0 0 1 54 668 Tm (- `STRIPE_VOICE_PRICE_ID`) Tj
-1 0 0 1 54 653 Tm (- `NEXTAUTH_SECRET`) Tj
-1 0 0 1 54 638 Tm (- `NEXTAUTH_URL`) Tj
-1 0 0 1 54 623 Tm (- `ADMIN_EMAIL`) Tj
-1 0 0 1 54 608 Tm (- `ADMIN_PASSWORD_HASH`) Tj
-1 0 0 1 54 593 Tm (- `ADMIN_TOTP_SECRET`) Tj
-1 0 0 1 54 578 Tm (- `INVOICEBOT_ENCRYPTION_KEY`) Tj
-1 0 0 1 54 563 Tm (- `ALLOWED_TELEGRAM_USER_IDS`) Tj
-1 0 0 1 54 548 Tm (- `ADMIN_TELEGRAM_USER_IDS`) Tj
-1 0 0 1 54 533 Tm () Tj
-1 0 0 1 54 518 Tm () Tj
-1 0 0 1 54 503 Tm (STATUS SNAPSHOT) Tj
+1 0 0 1 54 788 Tm () Tj
+1 0 0 1 54 773 Tm () Tj
+1 0 0 1 54 758 Tm (- `DATABASE_URL`) Tj
+1 0 0 1 54 743 Tm (- `TELEGRAM_TOKEN`) Tj
+1 0 0 1 54 728 Tm (- `OPENAI_API_KEY`) Tj
+1 0 0 1 54 713 Tm (- `MAILJET_API_KEY`) Tj
+1 0 0 1 54 698 Tm (- `MAILJET_SECRET_KEY`) Tj
+1 0 0 1 54 683 Tm (- `EMAIL_FROM`) Tj
+1 0 0 1 54 668 Tm (- `STRIPE_SECRET_KEY`) Tj
+1 0 0 1 54 653 Tm (- `STRIPE_WEBHOOK_SECRET`) Tj
+1 0 0 1 54 638 Tm (- `STRIPE_INVOICE_PRICE_ID`) Tj
+1 0 0 1 54 623 Tm (- `STRIPE_VOICE_PRICE_ID`) Tj
+1 0 0 1 54 608 Tm (- `NEXTAUTH_SECRET`) Tj
+1 0 0 1 54 593 Tm (- `NEXTAUTH_URL`) Tj
+1 0 0 1 54 578 Tm (- `ADMIN_EMAIL`) Tj
+1 0 0 1 54 563 Tm (- `ADMIN_PASSWORD_HASH`) Tj
+1 0 0 1 54 548 Tm (- `ADMIN_TOTP_SECRET`) Tj
+1 0 0 1 54 533 Tm (- `INVOICEBOT_ENCRYPTION_KEY`) Tj
+1 0 0 1 54 518 Tm (- `ALLOWED_TELEGRAM_USER_IDS`) Tj
+1 0 0 1 54 503 Tm (- `ADMIN_TELEGRAM_USER_IDS`) Tj
 1 0 0 1 54 488 Tm () Tj
 1 0 0 1 54 473 Tm () Tj
-1 0 0 1 54 458 Tm (The product has a functioning end-to-end loop:) Tj
+1 0 0 1 54 458 Tm (STATUS SNAPSHOT) Tj
 1 0 0 1 54 443 Tm () Tj
-1 0 0 1 54 428 Tm (- create invoice in Telegram) Tj
-1 0 0 1 54 413 Tm (- generate branded PDF) Tj
-1 0 0 1 54 398 Tm (- email invoice to client) Tj
-1 0 0 1 54 383 Tm (- handle payments through Stripe) Tj
-1 0 0 1 54 368 Tm (- manage users, billing, tickets, invoice history, and promotions from the admin) Tj
-1 0 0 1 54 353 Tm (  dashboard) Tj
-1 0 0 1 54 338 Tm () Tj
-1 0 0 1 54 323 Tm (This is now a strong MVP / early production candidate with meaningful operational,) Tj
-1 0 0 1 54 308 Tm (billing, privacy, and support foundations in place.) Tj
-1 0 0 1 54 38 Tm (InvoiceBot Project Dossier  |  Page 5 of 5) Tj
+1 0 0 1 54 428 Tm () Tj
+1 0 0 1 54 413 Tm (The product has a functioning end-to-end loop:) Tj
+1 0 0 1 54 398 Tm () Tj
+1 0 0 1 54 383 Tm (- create invoice in Telegram) Tj
+1 0 0 1 54 368 Tm (- generate branded PDF) Tj
+1 0 0 1 54 353 Tm (- email invoice to client) Tj
+1 0 0 1 54 338 Tm (- handle payments through Stripe) Tj
+1 0 0 1 54 323 Tm (- manage users, billing, tickets, invoice history, and promotions from the admin) Tj
+1 0 0 1 54 308 Tm (  dashboard) Tj
+1 0 0 1 54 293 Tm () Tj
+1 0 0 1 54 278 Tm (This is now a strong MVP / early production candidate with meaningful operational,) Tj
+1 0 0 1 54 263 Tm (billing, privacy, and support foundations in place.) Tj
+1 0 0 1 54 248 Tm () Tj
+1 0 0 1 54 233 Tm () Tj
+1 0 0 1 54 218 Tm (LEGAL CAVEATS BEFORE PUBLIC LAUNCH) Tj
+1 0 0 1 54 203 Tm () Tj
+1 0 0 1 54 188 Tm () Tj
+1 0 0 1 54 173 Tm (- Privacy policy and terms still require legal review. Self-drafted policies are helpful) Tj
+1 0 0 1 54 158 Tm (  operationally, but they should not be treated as final legal documents for public) Tj
+1 0 0 1 54 143 Tm (  launch.) Tj
+1 0 0 1 54 128 Tm (- The affiliate and promotions feature should not be treated as legally launch-ready) Tj
+1 0 0 1 54 113 Tm (  just because users can choose categories in the bot. New Zealand anti-spam rules for) Tj
+1 0 0 1 54 98 Tm (  commercial electronic messages require a defensible consent model, sender) Tj
+1 0 0 1 54 83 Tm (  identification, and unsubscribe handling.) Tj
+1 0 0 1 54 38 Tm (InvoiceBot Project Dossier  |  Page 5 of 6) Tj
 ET
 endstream
 endobj
@@ -289,13 +304,28 @@ endobj
 << /Type /Page /Parent 3 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 1 0 R >> >> /Contents 10 0 R >>
 endobj
 12 0 obj
-<< /Type /Pages /Kids [3 0 R 5 0 R 7 0 R 9 0 R 11 0 R] /Count 5 >>
+<< /Length 368 >>
+stream
+BT
+/F1 11 Tf
+1 0 0 1 54 788 Tm (- Promotion preferences in the bot are a good product foundation, but the consent) Tj
+1 0 0 1 54 773 Tm (  wording, records, unsubscribe flow, and campaign rules should be legally reviewed) Tj
+1 0 0 1 54 758 Tm (  before sending real commercial campaigns at scale.) Tj
+1 0 0 1 54 38 Tm (InvoiceBot Project Dossier  |  Page 6 of 6) Tj
+ET
+endstream
 endobj
 13 0 obj
-<< /Type /Catalog /Pages 12 0 R >>
+<< /Type /Page /Parent 3 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 1 0 R >> >> /Contents 12 0 R >>
+endobj
+14 0 obj
+<< /Type /Pages /Kids [3 0 R 5 0 R 7 0 R 9 0 R 11 0 R 13 0 R] /Count 6 >>
+endobj
+15 0 obj
+<< /Type /Catalog /Pages 14 0 R >>
 endobj
 xref
-0 14
+0 16
 0000000000 65535 f 
 0000000015 00000 n 
 0000000085 00000 n 
@@ -305,13 +335,15 @@ xref
 0000005562 00000 n 
 0000008173 00000 n 
 0000008299 00000 n 
-0000010862 00000 n 
-0000010988 00000 n 
-0000012673 00000 n 
-0000012801 00000 n 
-0000012884 00000 n 
+0000011030 00000 n 
+0000011156 00000 n 
+0000013717 00000 n 
+0000013845 00000 n 
+0000014265 00000 n 
+0000014393 00000 n 
+0000014483 00000 n 
 trailer
-<< /Size 14 /Root 13 0 R >>
+<< /Size 16 /Root 15 0 R >>
 startxref
-12935
+14534
 %%EOF

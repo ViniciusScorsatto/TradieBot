@@ -7,6 +7,7 @@ This is the practical baseline checklist for getting InvoiceBot into a reasonabl
 - Publish a `Privacy Policy` on the marketing site.
 - Publish `Terms of Service` on the marketing site.
 - Add a privacy contact email for access, correction, deletion, and complaint requests.
+- Get legal review of the privacy policy and terms before public launch, especially for New Zealand Privacy Act 2020 obligations.
 - Explain key subprocessors in the privacy policy:
   - Railway / hosting
   - PostgreSQL database hosting
@@ -73,6 +74,16 @@ This is the practical baseline checklist for getting InvoiceBot into a reasonabl
 - Review international transfer mechanisms for hosted vendors
 - Keep a simple subprocessors list in the privacy policy or ops docs
 
+## Marketing / Promotions
+
+- Do not treat preference selection alone as sufficient legal sign-off for commercial promotions.
+- Review the affiliate / promotion consent flow against the Unsolicited Electronic Messages Act 2007 before public launch.
+- Make sure commercial messages have:
+  - a lawful consent basis
+  - sender identification
+  - a working unsubscribe / opt-out path
+  - internal records showing how consent was obtained
+
 ## Product Work Still Recommended
 
 - Add user data export flow
@@ -98,3 +109,5 @@ This is the practical baseline checklist for getting InvoiceBot into a reasonabl
 - Formal subprocessors register page or section
 - Full admin 2FA enrollment flow with recovery codes
 - Role-based admin access if multiple operators need different permissions
+- Legal review of privacy policy / terms for NZ launch
+- Legal review of affiliate promotions consent and unsubscribe flow

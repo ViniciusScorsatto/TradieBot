@@ -143,7 +143,8 @@ Still recommended before broad public scale:
 - formal subprocessors register section
 - documented internal breach-response process
 - role-based access control if more than one operator will use the dashboard
-- legal review of privacy policy / terms before public launch
+- legal review of privacy policy / terms before public launch, especially for New Zealand Privacy Act 2020 obligations
+- legal review of affiliate / promotion consent flows before public launch under the Unsolicited Electronic Messages Act 2007
 
 ## Infrastructure
 
@@ -198,3 +199,9 @@ The product has a functioning end-to-end loop:
 - manage users, billing, tickets, invoice history, and promotions from the admin dashboard
 
 This is now a strong MVP / early production candidate with meaningful operational, billing, privacy, and support foundations in place.
+
+## Legal Caveats Before Public Launch
+
+- Privacy policy and terms still require legal review. Self-drafted policies are helpful operationally, but they should not be treated as final legal documents for public launch.
+- The affiliate and promotions feature should not be treated as legally launch-ready just because users can choose categories in the bot. New Zealand anti-spam rules for commercial electronic messages require a defensible consent model, sender identification, and unsubscribe handling.
+- Promotion preferences in the bot are a good product foundation, but the consent wording, records, unsubscribe flow, and campaign rules should be legally reviewed before sending real commercial campaigns at scale.
