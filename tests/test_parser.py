@@ -67,6 +67,14 @@ def test_parse_line_items_supports_compact_multi_item_voice_phrasing() -> None:
     assert [item.unit_price_cents for item in items] == [5000, 10000, 4500]
 
 
+def test_parse_line_items_supports_comma_separated_multi_item_voice_phrasing() -> None:
+    items = parse_line_items("Wood 50, Surface 100, Materials 45")
+
+    assert len(items) == 3
+    assert [item.description for item in items] == ["Wood", "Surface", "Materials"]
+    assert [item.unit_price_cents for item in items] == [5000, 10000, 4500]
+
+
 def test_parse_line_items_rejects_long_descriptions() -> None:
     long_description = "A" * 81
 
