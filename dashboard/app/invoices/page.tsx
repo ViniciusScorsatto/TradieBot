@@ -15,6 +15,23 @@ function formatCurrency(cents: number) {
   return `NZD $${(Math.max(cents, 0) / 100).toFixed(2)}`;
 }
 
+function maskClientName(name: string) {
+  const trimmed = name.trim();
+  if (!trimmed || trimmed === "No client") {
+    return "No client";
+  }
+
+  const parts = trimmed.split(/\s+/).filter(Boolean);
+  if (parts.length === 1) {
+    return `${parts[0].charAt(0).toUpperCase()}.`;
+  }
+
+  return parts
+    .slice(0, 2)
+    .map((part) => `${part.charAt(0).toUpperCase()}.`)
+    .join(" ");
+}
+
 async function loadInvoices(): Promise<InvoiceHistoryRow[]> {
   try {
     return await prisma.$queryRaw<InvoiceHistoryRow[]>`
@@ -52,6 +69,9 @@ export default async function InvoicesPage() {
         <p>
           Review the latest generated invoices and see whether they were only created in Telegram or also emailed to the client.
         </p>
+        <p>
+          This view is intentionally minimized: it shows invoice activity without exposing full client identities or recipient email addresses in the list.
+        </p>
       </section>
 
       <section className="panel">
@@ -76,13 +96,13 @@ export default async function InvoicesPage() {
               <tr key={invoice.id}>
                 <td>{invoice.invoiceNumber}</td>
                 <td>{invoice.businessName}</td>
-                <td>{invoice.clientName}</td>
+                <td>{maskClientName(invoice.clientName)}</td>
                 <td>{formatCurrency(invoice.totalCents)}</td>
                 <td>{invoice.createdAt}</td>
                 <td>
                   {invoice.emailedTo ? (
                     <span>
-                      Sent to {invoice.emailedTo}
+                      Emailed
                       <br />
                       <span className="muted">{invoice.emailedAt}</span>
                     </span>
