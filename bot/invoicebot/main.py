@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 
+from telegram import BotCommand
 from telegram.ext import Application, CallbackQueryHandler, CommandHandler, MessageHandler, filters
 
 from invoicebot.config import Settings
@@ -28,9 +29,28 @@ from invoicebot.services.storage import InMemoryRepository, PostgresRepository
 logging.basicConfig(level=logging.INFO)
 
 
+BOT_COMMANDS = [
+    BotCommand("start", "Start InvoiceBot"),
+    BotCommand("invoice", "Start a new invoice"),
+    BotCommand("generate", "Generate the invoice PDF"),
+    BotCommand("profile", "Set up your business details"),
+    BotCommand("template", "Choose your invoice template"),
+    BotCommand("newclient", "Add a new client"),
+    BotCommand("clients", "View or edit saved clients"),
+    BotCommand("history", "View recent invoices"),
+    BotCommand("repeat", "Repeat your latest invoice"),
+    BotCommand("support", "Send a bug or improvement ticket"),
+    BotCommand("promotions", "Choose affiliate promo preferences"),
+]
+
+
+async def _post_init(application: Application) -> None:
+    await application.bot.set_my_commands(BOT_COMMANDS)
+
+
 def build_application() -> Application:
     settings = Settings.from_env()
-    application = Application.builder().token(settings.telegram_token).build()
+    application = Application.builder().token(settings.telegram_token).post_init(_post_init).build()
     application.bot_data["settings"] = settings
     application.bot_data["repo"] = PostgresRepository(settings.database_url) if settings.database_url else InMemoryRepository()
 
