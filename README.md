@@ -28,10 +28,25 @@ Telegram-first invoicing product for tradies with:
 
 - `npm run dev:dashboard`
 - `npm run dev:site`
+- `npm test`
 - `npm run prisma:generate`
 - `npm run prisma:migrate`
 - `python -m invoicebot.main` from `bot/`
 - `python scripts/reset_test_user.py --telegram-user-id <id>` to reset one user's test counters
+
+## Smoke Tests
+
+Run the automated smoke suite with:
+
+```bash
+npm test
+```
+
+This currently covers:
+
+- Stripe checkout fulfillment logic for invoice and voice purchases
+- invoice parser coverage for common text and voice phrasing
+- invoice PDF generation smoke coverage when Python PDF dependencies are installed
 
 ### Test Helpers
 
@@ -63,8 +78,8 @@ python scripts/reset_test_user.py \
 ## Product Notes
 
 - Text invoicing is the default low-friction path.
-- Voice invoicing launches with `20` free monthly transcriptions, a `60` second cap per note, and strict guardrails.
-- Voice is intended to evolve into a premium-metered feature rather than an unlimited free capability.
+- Voice invoicing is minute-based, guarded, and capped at `60` seconds per note.
+- Current defaults are `10` free invoices per month and `5` free voice minutes per month.
 
 ## Railway
 

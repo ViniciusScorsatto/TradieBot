@@ -16,6 +16,9 @@
     "start:site": "npm run start --workspace site",
     "build": "npm run build --workspace @invoicebot/shared && npm run build --workspace dashboard && npm run build --workspace site",
     "lint": "npm run lint --workspace dashboard && npm run lint --workspace site",
+    "test:dashboard": "node --test dashboard/tests/*.test.js",
+    "test:bot": "PYTHONPATH=bot python3 -m unittest tests.test_parser tests.test_invoice_pdf",
+    "test": "npm run test:dashboard && npm run test:bot",
     "prisma:generate": "npx prisma generate",
     "prisma:migrate": "npx prisma migrate dev",
     "prisma:deploy": "npx prisma migrate deploy"

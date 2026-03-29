@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { randomUUID } from "crypto";
 import { prisma } from "../../../../lib/prisma";
 import { sendTelegramMessage } from "../../../../lib/telegram";
+import { getInvoiceBundleVoiceMinutes, resolveCheckoutFulfillment } from "../../../../lib/stripe-fulfillment";
 
 async function ensureUser(telegramUserId: string, stripeCustomerId?: string | null) {
   const existing = await prisma.$queryRaw<{ id: string }[]>`
@@ -33,16 +34,13 @@ async function ensureUser(telegramUserId: string, stripeCustomerId?: string | nu
 }
 
 async function fulfillCheckout(session: Stripe.Checkout.Session) {
-  const telegramUserId = session.metadata?.telegram_user_id ?? session.client_reference_id;
-  const purchaseType = session.metadata?.purchase_type ?? "invoice";
-  const creditsPurchased = Number(session.metadata?.credits_purchased ?? "0");
-
-  if (!telegramUserId || !creditsPurchased) {
+  const fulfillment = resolveCheckoutFulfillment(session, getInvoiceBundleVoiceMinutes());
+  if (!fulfillment) {
     return { ok: true, action: "ignored" };
   }
 
   const userId = await ensureUser(
-    String(telegramUserId),
+    fulfillment.telegramUserId,
     typeof session.customer === "string" ? session.customer : null
   );
 
@@ -62,9 +60,9 @@ async function fulfillCheckout(session: Stripe.Checkout.Session) {
       ${userId},
       ${session.id},
       ${typeof session.payment_intent === "string" ? session.payment_intent : null},
-      ${purchaseType},
+      ${fulfillment.purchaseType},
       ${session.amount_total ?? 0},
-      ${creditsPurchased},
+      ${fulfillment.creditsPurchased},
       ${"SUCCEEDED"}
     )
     ON CONFLICT (stripe_session_id) DO NOTHING
@@ -74,35 +72,34 @@ async function fulfillCheckout(session: Stripe.Checkout.Session) {
     return { ok: true, action: "already_processed" };
   }
 
-  if (purchaseType === "voice") {
-    const purchasedSeconds = creditsPurchased * 60;
+  if (fulfillment.purchaseType === "voice") {
     await prisma.$executeRaw`
       UPDATE users
-      SET paid_voice_seconds = paid_voice_seconds + ${purchasedSeconds},
+      SET paid_voice_seconds = paid_voice_seconds + ${fulfillment.voiceSecondsToAdd},
           plan_tier = 'PAID',
           updated_at = NOW()
       WHERE id = ${userId}
     `;
     await sendTelegramMessage(
-      String(telegramUserId),
-      `Payment received. ${creditsPurchased} voice minutes have been added to your account. You can keep invoicing by voice now.`
+      fulfillment.telegramUserId,
+      fulfillment.message
     );
-    return { ok: true, action: "unlock_voice_credits" };
+    return { ok: true, action: fulfillment.action };
   }
 
   await prisma.$executeRaw`
     UPDATE users
-    SET paid_invoice_credits = paid_invoice_credits + ${creditsPurchased},
-        paid_voice_seconds = paid_voice_seconds + ${Number(process.env.INVOICE_BUNDLE_VOICE_MINUTES ?? "10") * 60},
+    SET paid_invoice_credits = paid_invoice_credits + ${fulfillment.invoiceCreditsToAdd},
+        paid_voice_seconds = paid_voice_seconds + ${fulfillment.voiceSecondsToAdd},
         plan_tier = 'PAID',
         updated_at = NOW()
     WHERE id = ${userId}
   `;
   await sendTelegramMessage(
-    String(telegramUserId),
-    `Payment received. ${creditsPurchased} invoice credits and ${Number(process.env.INVOICE_BUNDLE_VOICE_MINUTES ?? "10")} voice minutes have been added to your account. You can keep generating invoices now.`
+    fulfillment.telegramUserId,
+    fulfillment.message
   );
-  return { ok: true, action: "unlock_invoice_credits" };
+  return { ok: true, action: fulfillment.action };
 }
 
 export async function POST(request: NextRequest) {
