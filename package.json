@@ -2,6 +2,9 @@
   "name": "invoicebot",
   "private": true,
   "packageManager": "npm@10.8.1",
+  "engines": {
+    "node": ">=20.19.0"
+  },
   "workspaces": [
     "dashboard",
     "site",
@@ -10,11 +13,11 @@
   "scripts": {
     "dev:dashboard": "npm run dev --workspace dashboard",
     "dev:site": "npm run dev --workspace site",
-    "build:dashboard": "npm run build --workspace @invoicebot/shared && npm run build --workspace dashboard",
+    "build:dashboard": "npm run prisma:generate && npm run build --workspace @invoicebot/shared && npm run build --workspace dashboard",
     "build:site": "npm run build --workspace @invoicebot/shared && npm run build --workspace site",
     "start:dashboard": "npm run start --workspace dashboard",
     "start:site": "npm run start --workspace site",
-    "build": "npm run build --workspace @invoicebot/shared && npm run build --workspace dashboard && npm run build --workspace site",
+    "build": "npm run prisma:generate && npm run build --workspace @invoicebot/shared && npm run build --workspace dashboard && npm run build --workspace site",
     "lint": "npm run lint --workspace dashboard && npm run lint --workspace site",
     "test:dashboard": "node --test dashboard/tests/*.test.js",
     "test:bot": "PYTHONPATH=bot python3 -m unittest tests.test_parser tests.test_invoice_pdf tests.test_compliance",
@@ -24,7 +27,8 @@
     "prisma:deploy": "npx prisma migrate deploy"
   },
   "devDependencies": {
-    "prisma": "^6.6.0",
+    "dotenv": "^16.6.1",
+    "prisma": "^7.6.0",
     "typescript": "^5.6.3"
   }
 }

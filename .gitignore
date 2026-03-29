@@ -13,4 +13,5 @@ coverage
 .turbo
 bot/.venv
 dashboard/.vercel
+dashboard/generated
 site/.vercel

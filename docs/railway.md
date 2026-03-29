@@ -146,6 +146,7 @@ Set these at the project level if multiple services need them:
 
 ## Notes
 
+- Prisma 7 requires Node `20.19+` or `22.12+`. Keep your local shell and Railway runtime on a supported version before running `prisma generate`, `prisma migrate dev`, or `prisma migrate deploy`.
 - Railway scans root `.env.example` files and suggests variables for import, which is why the repository keeps a root example env file.
 - Prisma migrations are the source of truth for database structure. Do not add new tables or columns via runtime application code.
 - The dashboard service uses `preDeployCommand = "npm run prisma:deploy"` so schema migrations run before startup.

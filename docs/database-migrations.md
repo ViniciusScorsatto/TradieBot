@@ -22,6 +22,8 @@ Use this whenever the database schema needs to change.
 
 ## Local Commands
 
+Use Node `20.19+` or `22.12+` before running Prisma 7 commands. This repo includes [`.nvmrc`](/Users/viniciusscorsatto/Desktop/AI%20Projects/Nz%20Fuel/.nvmrc) to make the expected version obvious.
+
 Create a migration locally:
 
 ```bash
