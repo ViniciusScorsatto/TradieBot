@@ -68,6 +68,19 @@ PRICE_COMMA_RE = re.compile(
     re.IGNORECASE,
 )
 
+COMPACT_PRICE_CHUNK_RE = re.compile(
+    r"""
+    (?P<description>[A-Za-z][A-Za-z0-9&'/+\-]*(?:\s+[A-Za-z][A-Za-z0-9&'/+\-]*)*)
+    \s*,?\s*
+    \$?(?P<price>\d+(?:\.\d{1,2})?)
+    (?=
+        \s+[A-Za-z]
+        |\s*$
+    )
+    """,
+    re.IGNORECASE | re.VERBOSE,
+)
+
 
 def _normalize_spoken_numbers(text: str) -> str:
     normalized = text
@@ -111,34 +124,64 @@ def _build_item(description: str, quantity: float, unit_price: float) -> Invoice
     )
 
 
+def _parse_single_line_item(raw_line: str) -> InvoiceItem:
+    normalized = _normalize_spoken_numbers(raw_line)
+
+    for pattern in (QTY_FIRST_RE, QTY_COMMA_PRICE_RE, QTY_NATURAL_RE, EACH_RE, TIMES_BEFORE_QTY_RE):
+        match = pattern.match(normalized)
+        if match:
+            return _build_item(
+                description=match.group("description"),
+                quantity=float(match.group("quantity")),
+                unit_price=float(match.group("price")),
+            )
+
+    match = PRICE_ONLY_RE.match(normalized) or PRICE_COMMA_RE.match(normalized)
+    if match:
+        return _build_item(
+            description=match.group("description"),
+            quantity=1,
+            unit_price=float(match.group("price")),
+        )
+
+    raise ValueError(f"Could not parse line item: {raw_line}")
+
+
+def _parse_compact_price_chunks(raw_line: str) -> list[InvoiceItem] | None:
+    normalized = _normalize_spoken_numbers(raw_line)
+    if re.search(r"\b(?:x|times?|at|each)\b", normalized, flags=re.IGNORECASE):
+        return None
+    matches = list(COMPACT_PRICE_CHUNK_RE.finditer(normalized))
+    if len(matches) < 2:
+        return None
+
+    consumed = " ".join(match.group(0).strip() for match in matches)
+    if re.sub(r"\s+", " ", consumed).strip() != normalized:
+        return None
+
+    items: list[InvoiceItem] = []
+    for match in matches:
+        items.append(
+            _build_item(
+                description=match.group("description"),
+                quantity=1,
+                unit_price=float(match.group("price")),
+            )
+        )
+    return items
+
+
 def parse_line_items(text: str) -> list[InvoiceItem]:
     items: list[InvoiceItem] = []
     for raw_line in [line.strip("-• ").strip() for line in text.splitlines() if line.strip()]:
-        normalized = _normalize_spoken_numbers(raw_line)
-
-        for pattern in (QTY_FIRST_RE, QTY_COMMA_PRICE_RE, QTY_NATURAL_RE, EACH_RE, TIMES_BEFORE_QTY_RE):
-            match = pattern.match(normalized)
-            if match:
-                items.append(
-                    _build_item(
-                        description=match.group("description"),
-                        quantity=float(match.group("quantity")),
-                        unit_price=float(match.group("price")),
-                    )
-                )
-                break
-        else:
-            match = PRICE_ONLY_RE.match(normalized) or PRICE_COMMA_RE.match(normalized)
-            if match:
-                items.append(
-                    _build_item(
-                        description=match.group("description"),
-                        quantity=1,
-                        unit_price=float(match.group("price")),
-                    )
-                )
-                continue
-
-            raise ValueError(f"Could not parse line item: {raw_line}")
+        compact_items = _parse_compact_price_chunks(raw_line)
+        if compact_items:
+            items.extend(compact_items)
+            continue
+        try:
+            items.append(_parse_single_line_item(raw_line))
+            continue
+        except ValueError:
+            raise
 
     return items

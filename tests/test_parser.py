@@ -59,6 +59,14 @@ def test_parse_line_items_supports_times_before_quantity() -> None:
     assert items[0].unit_price_cents == 9500
 
 
+def test_parse_line_items_supports_compact_multi_item_voice_phrasing() -> None:
+    items = parse_line_items("wood 50 service 100 materials 45")
+
+    assert len(items) == 3
+    assert [item.description for item in items] == ["Wood", "Service", "Materials"]
+    assert [item.unit_price_cents for item in items] == [5000, 10000, 4500]
+
+
 def test_parse_line_items_rejects_long_descriptions() -> None:
     long_description = "A" * 81
 
