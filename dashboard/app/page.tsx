@@ -1,6 +1,7 @@
 import Link from "next/link";
-import { dashboardCopy, overviewStats, payments, users } from "../lib/data";
+import { dashboardCopy } from "../lib/data";
 import { prisma } from "../lib/prisma";
+import { loadOverviewStats, loadOverviewUsers, loadRecentPayments } from "../lib/reporting";
 
 type OverviewTicketRow = {
   id: string;
@@ -68,7 +69,12 @@ function typeTone(type: OverviewTicketRow["type"]) {
 }
 
 export default async function DashboardHome() {
-  const recentTickets = await loadRecentTickets();
+  const [overviewStats, users, payments, recentTickets] = await Promise.all([
+    loadOverviewStats(),
+    loadOverviewUsers(),
+    loadRecentPayments(6),
+    loadRecentTickets(),
+  ]);
 
   return (
     <div className="stack">
@@ -110,8 +116,12 @@ export default async function DashboardHome() {
               </tr>
             </thead>
             <tbody>
-              {users.map((user) => (
-                <tr key={user.handle}>
+              {users.length === 0 ? (
+                <tr>
+                  <td colSpan={4}>No users found yet.</td>
+                </tr>
+              ) : users.map((user) => (
+                <tr key={user.id}>
                   <td>{user.name}</td>
                   <td>{user.plan}</td>
                   <td>{user.invoiceCount}</td>
@@ -177,7 +187,11 @@ export default async function DashboardHome() {
             </tr>
           </thead>
           <tbody>
-            {payments.map((payment) => (
+            {payments.length === 0 ? (
+              <tr>
+                <td colSpan={5}>No payments recorded yet.</td>
+              </tr>
+            ) : payments.map((payment) => (
               <tr key={`${payment.name}-${payment.date}`}>
                 <td>{payment.name}</td>
                 <td>{payment.amount}</td>

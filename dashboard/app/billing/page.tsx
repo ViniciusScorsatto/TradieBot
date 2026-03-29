@@ -1,7 +1,8 @@
 import { pricing } from "@invoicebot/shared";
-import { payments } from "../../lib/data";
+import { loadRecentPayments } from "../../lib/reporting";
 
-export default function BillingPage() {
+export default async function BillingPage() {
+  const payments = await loadRecentPayments(20);
   return (
     <div className="stack">
       <section className="hero-card">
@@ -28,7 +29,11 @@ export default function BillingPage() {
             </tr>
           </thead>
           <tbody>
-            {payments.map((payment) => (
+            {payments.length === 0 ? (
+              <tr>
+                <td colSpan={5}>No Stripe activity recorded yet.</td>
+              </tr>
+            ) : payments.map((payment) => (
               <tr key={`${payment.name}-${payment.date}`}>
                 <td>{payment.name}</td>
                 <td>{payment.amount}</td>
