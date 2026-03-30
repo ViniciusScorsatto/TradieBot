@@ -1,4 +1,6 @@
-import { prisma } from "../../lib/prisma";
+import { prisma } from "../../../lib/prisma";
+
+export const dynamic = "force-dynamic";
 
 type InvoiceHistoryRow = {
   id: string;

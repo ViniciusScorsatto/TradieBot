@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
-const links = [
+const baseLinks = [
   { href: "/", label: "Overview" },
   { href: "/users", label: "Users" },
   { href: "/invoices", label: "Invoices" },
@@ -12,9 +12,11 @@ const links = [
   { href: "/login", label: "Admin Login" }
 ] as const;
 
+const promotionsLink = { href: "/promotions", label: "Promotions" } as const;
+
 export function Sidebar({ promotionsEnabled }: { promotionsEnabled: boolean }) {
   const pathname = usePathname();
-  const visibleLinks = promotionsEnabled ? links : links.filter((link) => link.href !== "/promotions");
+  const visibleLinks = promotionsEnabled ? [...baseLinks, promotionsLink] : baseLinks;
 
   return (
     <aside className="sidebar">

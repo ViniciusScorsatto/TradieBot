@@ -1,9 +1,11 @@
 import { randomUUID } from "crypto";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { ActionButton } from "../../components/action-button";
-import { prisma } from "../../lib/prisma";
-import { sendTelegramMessage } from "../../lib/telegram";
+import { ActionButton } from "../../../components/action-button";
+import { prisma } from "../../../lib/prisma";
+import { sendTelegramMessage } from "../../../lib/telegram";
+
+export const dynamic = "force-dynamic";
 
 type TicketListRow = {
   id: string;

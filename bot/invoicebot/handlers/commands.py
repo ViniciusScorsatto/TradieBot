@@ -945,8 +945,11 @@ async def support_command(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     if not _is_user_allowed(update, context):
         await _deny_access(update, context)
         return
+    target_message = update.effective_message
+    if not target_message:
+        return
     context.user_data["mode"] = "support_type"
-    await update.message.reply_text(
+    await target_message.reply_text(
         "What kind of ticket do you want to send?",
         reply_markup=_support_type_keyboard(),
     )

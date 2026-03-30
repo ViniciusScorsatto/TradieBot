@@ -1,5 +1,7 @@
 import { pricing } from "@invoicebot/shared";
-import { loadRecentPayments } from "../../lib/reporting";
+import { loadRecentPayments } from "../../../lib/reporting";
+
+export const dynamic = "force-dynamic";
 
 export default async function BillingPage() {
   const payments = await loadRecentPayments(20);

@@ -1,8 +1,10 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { invoiceTemplates } from "@invoicebot/shared";
-import { ActionButton } from "../../components/action-button";
-import { prisma } from "../../lib/prisma";
+import { ActionButton } from "../../../components/action-button";
+import { prisma } from "../../../lib/prisma";
+
+export const dynamic = "force-dynamic";
 
 type AdminUserRow = {
   id: string;

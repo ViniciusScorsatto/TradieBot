@@ -26,9 +26,18 @@
     "prisma:migrate": "npx prisma migrate dev",
     "prisma:deploy": "npx prisma migrate deploy"
   },
+  "dependencies": {
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
   "devDependencies": {
     "dotenv": "^16.6.1",
     "prisma": "^7.6.0",
     "typescript": "^5.6.3"
+  },
+  "overrides": {
+    "styled-jsx": {
+      "react": "^18.3.1"
+    }
   }
 }

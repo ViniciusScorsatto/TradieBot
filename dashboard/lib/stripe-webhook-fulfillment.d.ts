@@ -1,7 +1,7 @@
 type CheckoutSessionLike = {
   id: string;
-  customer?: string | null;
-  payment_intent?: string | null;
+  customer?: unknown;
+  payment_intent?: unknown;
   amount_total?: number | null;
   client_reference_id?: string | null;
   metadata?: {

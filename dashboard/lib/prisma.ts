@@ -3,29 +3,39 @@ import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "../generated/prisma/client";
 
 const connectionString = process.env.DATABASE_URL;
-
-if (!connectionString) {
-  throw new Error("DATABASE_URL is required for Prisma");
-}
-
 const globalForPrisma = globalThis as unknown as { prisma?: PrismaClient; prismaPool?: Pool };
 
-const pool =
-  globalForPrisma.prismaPool ??
-  new Pool({
-    connectionString,
-  });
+let prismaClient: PrismaClient;
 
-const adapter = new PrismaPg(pool);
+if (!connectionString) {
+  prismaClient = new Proxy(
+    {},
+    {
+      get() {
+        throw new Error("DATABASE_URL is required for Prisma");
+      }
+    }
+  ) as PrismaClient;
+} else {
+  const pool =
+    globalForPrisma.prismaPool ??
+    new Pool({
+      connectionString,
+    });
 
-export const prisma =
-  globalForPrisma.prisma ??
-  new PrismaClient({
-    adapter,
-    log: ["warn", "error"]
-  });
+  const adapter = new PrismaPg(pool);
 
-if (process.env.NODE_ENV !== "production") {
-  globalForPrisma.prisma = prisma;
-  globalForPrisma.prismaPool = pool;
+  prismaClient =
+    globalForPrisma.prisma ??
+    new PrismaClient({
+      adapter,
+      log: ["warn", "error"]
+    });
+
+  if (process.env.NODE_ENV !== "production") {
+    globalForPrisma.prisma = prismaClient;
+    globalForPrisma.prismaPool = pool;
+  }
 }
+
+export const prisma = prismaClient;

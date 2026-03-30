@@ -1,7 +1,9 @@
 import Link from "next/link";
-import { dashboardCopy } from "../lib/data";
-import { prisma } from "../lib/prisma";
-import { loadOverviewStats, loadOverviewUsers, loadRecentPayments } from "../lib/reporting";
+import { dashboardCopy } from "../../lib/data";
+import { prisma } from "../../lib/prisma";
+import { loadOverviewStats, loadOverviewUsers, loadRecentPayments } from "../../lib/reporting";
+
+export const dynamic = "force-dynamic";
 
 type OverviewTicketRow = {
   id: string;
