@@ -110,10 +110,7 @@ def _render_history_page(
         for index, draft in enumerate(visible)
     ]
 
-    buttons = [
-        [InlineKeyboardButton(f"Repeat {start + index + 1}", callback_data=f"history_repeat:{start + index}")]
-        for index, _ in enumerate(visible)
-    ]
+    buttons: list[list[InlineKeyboardButton]] = []
     nav_row: list[InlineKeyboardButton] = []
     if page > 0:
         nav_row.append(InlineKeyboardButton("Prev", callback_data=f"history_page:{page - 1}"))
@@ -125,8 +122,8 @@ def _render_history_page(
     return (
         f"Recent invoices (page {page + 1}/{total_pages}):\n"
         + "\n".join(lines)
-        + "\n\nTap a Repeat button below, or send the invoice number as text to load that one again.",
-        InlineKeyboardMarkup(buttons),
+        + "\n\nSend the invoice number as text to load that one again.",
+        InlineKeyboardMarkup(buttons) if buttons else None,
     )
 
 
@@ -996,6 +993,7 @@ async def history_command(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         return
     repo = _repo(context)
     user_id = _user_key(update)
+    context.user_data["mode"] = "history_select"
     context.user_data["history_page"] = 0
     await _send_history_page(update.message, repo, user_id, page=0)
 
@@ -1404,6 +1402,31 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         await _send_clients_list(update.message, repo.list_clients(user_id), page=0, query=text)
         return
 
+    if mode == "history_select":
+        history = repo.list_history(user_id)
+        if not history:
+            context.user_data["mode"] = None
+            await update.message.reply_text("No invoices generated yet.")
+            return
+        if not text.isdigit():
+            await update.message.reply_text(
+                "Send the invoice number from the list above, or use Prev / Next to browse more history."
+            )
+            return
+        history_index = int(text) - 1
+        if history_index < 0 or history_index >= len(history):
+            await update.message.reply_text(
+                "That invoice number is not available in history. Send a visible number from the list, or browse with Prev / Next."
+            )
+            return
+        new_draft = replace(history[history_index])
+        repo.save_draft(new_draft)
+        context.user_data["mode"] = None
+        await update.message.reply_text(
+            "That invoice is now loaded as a new draft. Use /generate, or send more items to adjust it first."
+        )
+        return
+
     if mode == "edit_client_field":
         client_id = context.user_data.get("edit_client_id")
         field = context.user_data.get("edit_client_field")
@@ -1646,22 +1669,9 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     if query.data.startswith("history_page:"):
         page = int(query.data.split(":", 1)[1])
         context.user_data["history_page"] = page
+        context.user_data["mode"] = "history_select"
         text, reply_markup = _render_history_page(repo, user_id, page=page)
         await query.edit_message_text(text, reply_markup=reply_markup)
-        return
-
-    if query.data.startswith("history_repeat:"):
-        history_index = int(query.data.split(":", 1)[1])
-        history = repo.list_history(user_id)
-        if history_index < 0 or history_index >= len(history):
-            await query.edit_message_text("That invoice is no longer available in history.")
-            return
-        new_draft = replace(history[history_index])
-        repo.save_draft(new_draft)
-        await query.edit_message_text("Loaded that invoice as a new draft.")
-        await query.message.reply_text(
-            "That invoice is now loaded as a new draft. Use /generate, or send more items to adjust it first."
-        )
         return
 
     if query.data.startswith("promo_pref_toggle:"):
