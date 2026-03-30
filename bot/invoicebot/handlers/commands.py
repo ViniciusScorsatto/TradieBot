@@ -123,7 +123,9 @@ def _render_history_page(
         buttons.append(nav_row)
 
     return (
-        f"Recent invoices (page {page + 1}/{total_pages}):\n" + "\n".join(lines),
+        f"Recent invoices (page {page + 1}/{total_pages}):\n"
+        + "\n".join(lines)
+        + "\n\nTap a Repeat button below, or send the invoice number as text to load that one again.",
         InlineKeyboardMarkup(buttons),
     )
 
