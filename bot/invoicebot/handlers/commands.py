@@ -66,6 +66,17 @@ PROMOTION_CATEGORIES = (
 )
 
 
+def _support_ai_followup_keyboard(ticket_id: str) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        [
+            [
+                InlineKeyboardButton("That helped", callback_data=f"support_ai_ok:{ticket_id}"),
+                InlineKeyboardButton("Need human help", callback_data=f"support_ai_human:{ticket_id}"),
+            ]
+        ]
+    )
+
+
 def _user_key(update: Update) -> str:
     user = update.effective_user
     return str(user.id if user else "unknown")
@@ -373,7 +384,10 @@ async def _handle_bug_ai_triage(
         return
 
     repo.record_ticket_message(ticket_id, "ai", ai_reply, mark_ai_first_response=True)
-    await message.reply_text(f"Ticket submitted: {ticket.subject}\n\n{ai_reply}")
+    await message.reply_text(
+        f"Ticket submitted: {ticket.subject}\n\n{ai_reply}\n\nDid this solve it, or would you like a human to keep reviewing it?",
+        reply_markup=_support_ai_followup_keyboard(ticket_id),
+    )
 
 
 def _item_line(item, index: int) -> str:
@@ -1538,6 +1552,33 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         context.user_data["mode"] = "support_subject"
         await query.edit_message_text(
             f"{support_type.title()} selected.\n\nSend a short subject line so the ticket is easy to scan in admin."
+        )
+        return
+
+    if query.data.startswith("support_ai_ok:"):
+        ticket_id = query.data.split(":", 1)[1]
+        repo.record_ticket_message(
+            ticket_id,
+            "telegram_user",
+            "User confirmed the AI bug triage reply solved the issue.",
+        )
+        await query.edit_message_reply_markup(reply_markup=None)
+        await query.message.reply_text(
+            "Great, I’ve noted that the AI answer helped.\n\n"
+            "If the issue comes back or something still feels off, send /support again and we can keep investigating."
+        )
+        return
+
+    if query.data.startswith("support_ai_human:"):
+        ticket_id = query.data.split(":", 1)[1]
+        repo.record_ticket_message(
+            ticket_id,
+            "telegram_user",
+            "User asked for human follow-up after the AI bug triage reply.",
+        )
+        await query.edit_message_reply_markup(reply_markup=None)
+        await query.message.reply_text(
+            "No problem. I’ve marked this for human follow-up, and we’ll continue in Telegram."
         )
         return
 
