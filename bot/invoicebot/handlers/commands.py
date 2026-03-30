@@ -288,8 +288,18 @@ async def _store_profile_logo(message: Message | None, context: ContextTypes.DEF
     mime_type = "image/png" if image_format == "PNG" else "image/jpeg"
     profile.logo_url = f"data:{mime_type};base64,{base64.b64encode(raw_bytes).decode('ascii')}"
     _repo(context).save_profile(user_id, profile)
-    context.user_data["mode"] = None
-    await message.reply_text("Logo saved. It will be used on your invoice PDFs.")
+    context.user_data["mode"] = "profile_invoice_start_number"
+    await message.reply_text(
+        "Logo saved. It will be used on your invoice PDFs.\n\n"
+        + _document_number_prompt(
+            profile,
+            document_label="Invoice",
+            field="next_invoice_number",
+            prefix=profile.invoice_prefix,
+        ),
+        parse_mode="Markdown",
+        reply_markup=_document_number_skip_keyboard("profile_invoice_start_number"),
+    )
     return True
 
 
@@ -1058,6 +1068,19 @@ def _payment_skip_keyboard(profile):
     return _skip_keyboard("profile_bank_details", label=label)
 
 
+def _document_number_prompt(profile, *, document_label: str, field: str, prefix: str) -> str:
+    current_value = getattr(profile, field)
+    current_number = f"{prefix}-{current_value:04d}"
+    return (
+        f"Saved. Current {document_label.lower()} start number: {current_number}\n"
+        f"Now send the number you want future {document_label.lower()}s to start from, like `{current_value}`."
+    )
+
+
+def _document_number_skip_keyboard(step: str) -> InlineKeyboardMarkup:
+    return _skip_keyboard(step, label="Keep current")
+
+
 async def template_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if not _is_user_allowed(update, context):
         await _deny_access(update, context)
@@ -1475,10 +1498,68 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
     if mode == "profile_logo":
         if text.lower() == "skip":
+            profile = repo.get_or_create_profile(user_id)
+            context.user_data["mode"] = "profile_invoice_start_number"
+            await update.message.reply_text(
+                _document_number_prompt(
+                    profile,
+                    document_label="Invoice",
+                    field="next_invoice_number",
+                    prefix=profile.invoice_prefix,
+                ),
+                parse_mode="Markdown",
+                reply_markup=_document_number_skip_keyboard("profile_invoice_start_number"),
+            )
+            return
+        await update.message.reply_text("Send your logo as a photo or PNG/JPG file, or use the skip button.")
+        return
+
+    if mode == "profile_invoice_start_number":
+        profile = repo.get_or_create_profile(user_id)
+        if text.lower() == "skip":
+            context.user_data["mode"] = "profile_quote_start_number"
+            await update.message.reply_text(
+                _document_number_prompt(
+                    profile,
+                    document_label="Quote",
+                    field="next_quote_number",
+                    prefix=profile.quote_prefix,
+                ),
+                parse_mode="Markdown",
+                reply_markup=_document_number_skip_keyboard("profile_quote_start_number"),
+            )
+            return
+        if not text.isdigit() or int(text) <= 0:
+            await update.message.reply_text("Send a whole number like `1`, `25`, or `100`.", parse_mode="Markdown")
+            return
+        profile.next_invoice_number = int(text)
+        repo.save_profile(user_id, profile)
+        context.user_data["mode"] = "profile_quote_start_number"
+        await update.message.reply_text(
+            _document_number_prompt(
+                profile,
+                document_label="Quote",
+                field="next_quote_number",
+                prefix=profile.quote_prefix,
+            ),
+            parse_mode="Markdown",
+            reply_markup=_document_number_skip_keyboard("profile_quote_start_number"),
+        )
+        return
+
+    if mode == "profile_quote_start_number":
+        profile = repo.get_or_create_profile(user_id)
+        if text.lower() == "skip":
             context.user_data["mode"] = None
             await update.message.reply_text("Profile saved. Use /template to pick your default invoice layout.")
             return
-        await update.message.reply_text("Send your logo as a photo or PNG/JPG file, or use the skip button.")
+        if not text.isdigit() or int(text) <= 0:
+            await update.message.reply_text("Send a whole number like `1`, `25`, or `100`.", parse_mode="Markdown")
+            return
+        profile.next_quote_number = int(text)
+        repo.save_profile(user_id, profile)
+        context.user_data["mode"] = None
+        await update.message.reply_text("Profile saved. Use /template to pick your default invoice layout.")
         return
 
     if mode == "template_select":
@@ -2030,8 +2111,38 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             await query.message.reply_text(logo_text, reply_markup=keyboard)
             return
         if step == "profile_logo":
-            context.user_data["mode"] = None
+            profile = repo.get_or_create_profile(user_id)
+            context.user_data["mode"] = "profile_invoice_start_number"
             await query.edit_message_text("Skipping logo upload for now.")
+            await query.message.reply_text(
+                _document_number_prompt(
+                    profile,
+                    document_label="Invoice",
+                    field="next_invoice_number",
+                    prefix=profile.invoice_prefix,
+                ),
+                parse_mode="Markdown",
+                reply_markup=_document_number_skip_keyboard("profile_invoice_start_number"),
+            )
+            return
+        if step == "profile_invoice_start_number":
+            profile = repo.get_or_create_profile(user_id)
+            context.user_data["mode"] = "profile_quote_start_number"
+            await query.edit_message_text("Keeping current invoice start number.")
+            await query.message.reply_text(
+                _document_number_prompt(
+                    profile,
+                    document_label="Quote",
+                    field="next_quote_number",
+                    prefix=profile.quote_prefix,
+                ),
+                parse_mode="Markdown",
+                reply_markup=_document_number_skip_keyboard("profile_quote_start_number"),
+            )
+            return
+        if step == "profile_quote_start_number":
+            context.user_data["mode"] = None
+            await query.edit_message_text("Keeping current quote start number.")
             await query.message.reply_text("Profile saved. Use /template to pick your default invoice layout.")
             return
         if step == "client_company":
