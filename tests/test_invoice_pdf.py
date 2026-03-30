@@ -7,7 +7,7 @@ from invoicebot.models import Client, InvoiceDraft, InvoiceItem, Profile
 REPORTLAB_AVAILABLE = importlib.util.find_spec("reportlab") is not None
 
 if REPORTLAB_AVAILABLE:
-    from invoicebot.services.pdf import render_invoice_pdf
+    from invoicebot.services.pdf import render_invoice_pdf, render_quote_pdf
 
 
 @unittest.skipUnless(REPORTLAB_AVAILABLE, "reportlab is not installed in this environment")
@@ -45,6 +45,34 @@ class InvoicePdfSmokeTests(unittest.TestCase):
         self.assertGreater(len(pdf_bytes), 1000)
         self.assertIn(b"Payment details", pdf_bytes)
         self.assertIn(b"Invoice Summary", pdf_bytes)
+
+    def test_render_quote_pdf_smoke_includes_key_quote_text(self) -> None:
+        profile = Profile(
+            company_name="Tradies NZ",
+            address="1 Test Street, Auckland",
+            email="hello@example.com",
+            phone="+64 21 123 4567",
+            bank_details="Bank: Your Bank, Account Name: Your Business, Account: 00-0000-0000000-00",
+        )
+        client = Client(
+            id="client-1",
+            name="Sophie Taylor",
+            company="Taylor Services",
+            email="sophie@example.com",
+        )
+        draft = InvoiceDraft(
+            user_id="user-1",
+            document_type="QUOTE",
+            items=[InvoiceItem(description="Garden tidy", quantity=2, unit_price_cents=9500)],
+            client_id=client.id,
+            created_at=datetime(2026, 3, 29, 10, 0, tzinfo=UTC),
+        )
+
+        pdf_bytes = render_quote_pdf(profile, draft, client)
+
+        self.assertTrue(pdf_bytes.startswith(b"%PDF"))
+        self.assertGreater(len(pdf_bytes), 1000)
+        self.assertIn(b"Quote Summary", pdf_bytes)
 
 
 if __name__ == "__main__":

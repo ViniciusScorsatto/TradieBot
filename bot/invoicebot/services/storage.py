@@ -8,7 +8,7 @@ from datetime import UTC, datetime
 from typing import Any, DefaultDict, Protocol
 from uuid import uuid4
 
-from invoicebot.models import Client, InvoiceDraft, InvoiceItem, Profile, SupportTicket
+from invoicebot.models import Client, DocumentType, InvoiceDraft, InvoiceItem, Profile, SupportTicket
 from invoicebot.services.tax import gst_cents, subtotal_cents, total_cents
 
 
@@ -19,7 +19,7 @@ def _utcnow() -> datetime:
 class Repository(Protocol):
     def get_or_create_profile(self, user_id: str) -> Profile: ...
     def save_profile(self, user_id: str, profile: Profile) -> Profile: ...
-    def create_draft(self, user_id: str) -> InvoiceDraft: ...
+    def create_draft(self, user_id: str, document_type: DocumentType = "INVOICE") -> InvoiceDraft: ...
     def get_draft(self, user_id: str) -> InvoiceDraft | None: ...
     def save_draft(self, draft: InvoiceDraft) -> InvoiceDraft: ...
     def finalize_draft(self, user_id: str) -> InvoiceDraft | None: ...
@@ -29,7 +29,10 @@ class Repository(Protocol):
     def update_client(self, user_id: str, client: Client) -> Client | None: ...
     def delete_client(self, user_id: str, client_id: str) -> bool: ...
     def list_history(self, user_id: str) -> list[InvoiceDraft]: ...
+    def list_quotes(self, user_id: str) -> list[InvoiceDraft]: ...
     def record_invoice_email(self, user_id: str, invoice_number: str, to_email: str) -> None: ...
+    def record_quote_email(self, user_id: str, quote_number: str, to_email: str) -> None: ...
+    def convert_quote_to_invoice_draft(self, user_id: str, quote_number: str) -> InvoiceDraft | None: ...
     def record_ticket(self, ticket: SupportTicket) -> str: ...
     def record_ticket_message(self, ticket_id: str, sender: str, body: str, *, mark_ai_first_response: bool = False) -> None: ...
     def bug_ai_assists_today(self, user_id: str) -> int: ...
@@ -57,6 +60,8 @@ class InMemoryRepository:
         self.drafts: dict[str, InvoiceDraft] = {}
         self.clients: DefaultDict[str, list[Client]] = defaultdict(list)
         self.history: DefaultDict[str, list[InvoiceDraft]] = defaultdict(list)
+        self.quotes: DefaultDict[str, list[InvoiceDraft]] = defaultdict(list)
+        self.quote_records: DefaultDict[str, list[dict[str, Any]]] = defaultdict(list)
         self.invoice_counts: DefaultDict[str, int] = defaultdict(int)
         self.credits: DefaultDict[str, int] = defaultdict(int)
         self.voice_seconds_credits: DefaultDict[str, int] = defaultdict(int)
@@ -81,8 +86,8 @@ class InMemoryRepository:
         self.profiles[user_id] = profile
         return profile
 
-    def create_draft(self, user_id: str) -> InvoiceDraft:
-        draft = InvoiceDraft(user_id=user_id)
+    def create_draft(self, user_id: str, document_type: DocumentType = "INVOICE") -> InvoiceDraft:
+        draft = InvoiceDraft(user_id=user_id, document_type=document_type)
         self.drafts[user_id] = draft
         return draft
 
@@ -96,8 +101,26 @@ class InMemoryRepository:
     def finalize_draft(self, user_id: str) -> InvoiceDraft | None:
         draft = self.drafts.pop(user_id, None)
         if draft:
-            self.history[user_id].insert(0, replace(draft))
-            self.invoice_counts[user_id] += 1
+            if draft.document_type == "QUOTE":
+                profile = self.get_or_create_profile(user_id)
+                quote_number = f"{profile.quote_prefix}-{profile.next_quote_number:04d}"
+                self.quotes[user_id].insert(0, replace(draft))
+                self.quote_records[user_id].insert(
+                    0,
+                    {
+                        "quote_number": quote_number,
+                        "draft": replace(draft),
+                        "emailed_to": None,
+                        "emailed_at": None,
+                        "converted_invoice_id": None,
+                        "converted_at": None,
+                    },
+                )
+                profile.next_quote_number += 1
+                self.save_profile(user_id, profile)
+            else:
+                self.history[user_id].insert(0, replace(draft))
+                self.invoice_counts[user_id] += 1
         return draft
 
     def add_client(self, user_id: str, name: str, company: str = "", email: str = "", phone: str = "", address: str = "") -> Client:
@@ -135,6 +158,9 @@ class InMemoryRepository:
     def list_history(self, user_id: str) -> list[InvoiceDraft]:
         return self.history[user_id]
 
+    def list_quotes(self, user_id: str) -> list[InvoiceDraft]:
+        return self.quotes[user_id]
+
     def record_ticket(self, ticket: SupportTicket) -> str:
         ticket_id = str(uuid4())
         self.tickets[ticket.user_id].append(ticket)
@@ -159,6 +185,33 @@ class InMemoryRepository:
         return count
 
     def record_invoice_email(self, user_id: str, invoice_number: str, to_email: str) -> None:
+        return None
+
+    def record_quote_email(self, user_id: str, quote_number: str, to_email: str) -> None:
+        for record in self.quote_records[user_id]:
+            if record["quote_number"] == quote_number:
+                record["emailed_to"] = to_email
+                record["emailed_at"] = _utcnow()
+                break
+
+    def convert_quote_to_invoice_draft(self, user_id: str, quote_number: str) -> InvoiceDraft | None:
+        for record in self.quote_records[user_id]:
+            if record["quote_number"] != quote_number:
+                continue
+            quote_draft = record["draft"]
+            new_draft = InvoiceDraft(
+                user_id=user_id,
+                document_type="INVOICE",
+                items=[replace(item) for item in quote_draft.items],
+                client_id=quote_draft.client_id,
+                source_quote_id=quote_number,
+                notes=quote_draft.notes,
+                created_at=_utcnow(),
+            )
+            self.drafts[user_id] = new_draft
+            record["converted_invoice_id"] = "pending"
+            record["converted_at"] = _utcnow()
+            return new_draft
         return None
 
     def list_promotion_preferences(self, user_id: str) -> list[str]:
@@ -230,12 +283,14 @@ class PostgresRepository:
     def ensure_schema(self) -> None:
         required_columns = {
             "users": {"id", "telegram_user_id", "invoice_count_this_month", "voice_seconds_this_month", "paid_invoice_credits", "paid_voice_seconds", "promotion_consent_at", "promotion_consent_source", "promotion_opt_out_at"},
-            "profiles": {"id", "user_id", "address", "default_template_id", "next_invoice_number"},
+            "profiles": {"id", "user_id", "address", "default_template_id", "next_invoice_number", "quote_prefix", "next_quote_number"},
             "clients": {"id", "user_id", "name", "address"},
-            "invoice_drafts": {"id", "user_id", "client_id", "status", "subtotal_cents", "gst_cents", "total_cents"},
+            "invoice_drafts": {"id", "user_id", "client_id", "status", "document_type", "source_quote_id", "subtotal_cents", "gst_cents", "total_cents"},
             "invoice_draft_items": {"id", "draft_id", "description", "quantity", "unit_price", "discount_cents", "discount_percent", "line_total"},
-            "invoices": {"id", "user_id", "client_id", "profile_snapshot", "invoice_number", "template_id", "subtotal_cents", "gst_cents", "total_cents", "emailed_to", "emailed_at"},
+            "invoices": {"id", "user_id", "client_id", "profile_snapshot", "invoice_number", "template_id", "source_quote_id", "subtotal_cents", "gst_cents", "total_cents", "emailed_to", "emailed_at"},
             "invoice_items": {"id", "invoice_id", "description", "quantity", "unit_price", "discount_cents", "discount_percent", "line_total"},
+            "quotes": {"id", "user_id", "client_id", "profile_snapshot", "quote_number", "template_id", "subtotal_cents", "gst_cents", "total_cents", "emailed_to", "emailed_at", "converted_invoice_id", "converted_at"},
+            "quote_items": {"id", "quote_id", "description", "quantity", "unit_price", "discount_cents", "discount_percent", "line_total"},
             "tickets": {"id", "user_id", "type", "status", "subject", "ai_first_response_sent_at"},
             "ticket_messages": {"id", "ticket_id", "sender", "body"},
             "payments": {"id", "user_id", "stripe_session_id", "stripe_payment_id", "purchase_type", "amount_cents", "credits_purchased", "status"},
@@ -316,6 +371,8 @@ class PostgresRepository:
             default_template_id=row.get("default_template_id") or "classic-blue",
             invoice_prefix=row.get("invoice_prefix") or "INV",
             next_invoice_number=row.get("next_invoice_number") or 1,
+            quote_prefix=row.get("quote_prefix") or "QUO",
+            next_quote_number=row.get("next_quote_number") or 1,
         )
 
     def _row_to_client(self, row: dict) -> Client:
@@ -400,6 +457,8 @@ class PostgresRepository:
                         default_template_id = %s,
                         invoice_prefix = %s,
                         next_invoice_number = %s,
+                        quote_prefix = %s,
+                        next_quote_number = %s,
                         updated_at = NOW()
                     WHERE user_id = %s
                     """,
@@ -414,6 +473,8 @@ class PostgresRepository:
                         profile.default_template_id,
                         profile.invoice_prefix,
                         profile.next_invoice_number,
+                        profile.quote_prefix,
+                        profile.next_quote_number,
                         user["id"],
                     ),
                 )
@@ -422,9 +483,10 @@ class PostgresRepository:
                     """
                     INSERT INTO profiles (
                         id, user_id, company_name, address, gst_number, email, phone,
-                        bank_details, logo_url, default_template_id, invoice_prefix, next_invoice_number
+                        bank_details, logo_url, default_template_id, invoice_prefix, next_invoice_number,
+                        quote_prefix, next_quote_number
                     )
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                     """,
                     (
                         str(uuid4()),
@@ -439,12 +501,14 @@ class PostgresRepository:
                         profile.default_template_id,
                         profile.invoice_prefix,
                         profile.next_invoice_number,
+                        profile.quote_prefix,
+                        profile.next_quote_number,
                     ),
                 )
             conn.commit()
         return profile
 
-    def create_draft(self, user_id: str) -> InvoiceDraft:
+    def create_draft(self, user_id: str, document_type: DocumentType = "INVOICE") -> InvoiceDraft:
         user = self._ensure_user(user_id)
         with self._connect() as conn, conn.cursor() as cur:
             existing = self._active_draft_row(cur, user["id"])
@@ -453,21 +517,22 @@ class PostgresRepository:
                 cur.execute(
                     """
                     UPDATE invoice_drafts
-                    SET client_id = NULL, notes = '', subtotal_cents = 0, gst_cents = 0, total_cents = 0, updated_at = NOW()
+                    SET client_id = NULL, notes = '', document_type = %s, source_quote_id = NULL,
+                        subtotal_cents = 0, gst_cents = 0, total_cents = 0, updated_at = NOW()
                     WHERE id = %s
                     """,
-                    (existing["id"],),
+                    (document_type, existing["id"]),
                 )
             else:
                 cur.execute(
                     """
-                    INSERT INTO invoice_drafts (id, user_id)
-                    VALUES (%s, %s)
+                    INSERT INTO invoice_drafts (id, user_id, document_type)
+                    VALUES (%s, %s, %s)
                     """,
-                    (str(uuid4()), user["id"]),
+                    (str(uuid4()), user["id"], document_type),
                 )
             conn.commit()
-        return InvoiceDraft(user_id=user_id)
+        return InvoiceDraft(user_id=user_id, document_type=document_type)
 
     def get_draft(self, user_id: str) -> InvoiceDraft | None:
         user = self._ensure_user(user_id)
@@ -478,8 +543,10 @@ class PostgresRepository:
             items = self._load_draft_items(cur, draft["id"])
             return InvoiceDraft(
                 user_id=user_id,
+                document_type=draft.get("document_type") or "INVOICE",
                 items=items,
                 client_id=draft.get("client_id"),
+                source_quote_id=draft.get("source_quote_id"),
                 notes=draft.get("notes") or "",
                 created_at=draft.get("created_at") or _utcnow(),
             )
@@ -497,12 +564,15 @@ class PostgresRepository:
                 cur.execute(
                     """
                     UPDATE invoice_drafts
-                    SET client_id = %s, notes = %s, subtotal_cents = %s, gst_cents = %s, total_cents = %s, updated_at = NOW()
+                    SET client_id = %s, notes = %s, document_type = %s, source_quote_id = %s,
+                        subtotal_cents = %s, gst_cents = %s, total_cents = %s, updated_at = NOW()
                     WHERE id = %s
                     """,
                     (
                         draft.client_id,
                         draft.notes,
+                        draft.document_type,
+                        draft.source_quote_id,
                         draft_subtotal,
                         draft_gst,
                         draft_total,
@@ -514,15 +584,17 @@ class PostgresRepository:
                 cur.execute(
                     """
                     INSERT INTO invoice_drafts (
-                        id, user_id, client_id, notes, subtotal_cents, gst_cents, total_cents
+                        id, user_id, client_id, notes, document_type, source_quote_id, subtotal_cents, gst_cents, total_cents
                     )
-                    VALUES (%s, %s, %s, %s, %s, %s, %s)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
                     """,
                     (
                         draft_id,
                         user["id"],
                         draft.client_id,
                         draft.notes,
+                        draft.document_type,
+                        draft.source_quote_id,
                         draft_subtotal,
                         draft_gst,
                         draft_total,
@@ -560,76 +632,146 @@ class PostgresRepository:
             items = self._load_draft_items(cur, draft_row["id"])
             draft = InvoiceDraft(
                 user_id=user_id,
+                document_type=draft_row.get("document_type") or "INVOICE",
                 items=items,
                 client_id=draft_row.get("client_id"),
+                source_quote_id=draft_row.get("source_quote_id"),
                 notes=draft_row.get("notes") or "",
                 created_at=draft_row.get("created_at") or _utcnow(),
             )
-            invoice_id = str(uuid4())
-            invoice_number = f"{profile.invoice_prefix}-{profile.next_invoice_number:04d}"
             draft_subtotal = subtotal_cents(draft)
             draft_gst = gst_cents(draft, profile)
             draft_total = total_cents(draft, profile)
-            cur.execute(
-                """
-                INSERT INTO invoices (
-                    id, user_id, client_id, profile_snapshot, invoice_number, template_id,
-                    subtotal_cents, gst_cents, total_cents, notes
-                )
-                VALUES (%s, %s, %s, %s::jsonb, %s, %s, %s, %s, %s, %s)
-                """,
-                (
-                    invoice_id,
-                    user["id"],
-                    draft.client_id,
-                    json.dumps(
-                        {
-                            "company_name": profile.company_name,
-                            "address": profile.address,
-                            "gst_number": profile.gst_number,
-                            "email": profile.email,
-                            "phone": profile.phone,
-                            "bank_details": profile.bank_details,
-                            "default_template_id": profile.default_template_id,
-                        }
-                    ),
-                    invoice_number,
-                    profile.default_template_id,
-                    draft_subtotal,
-                    draft_gst,
-                    draft_total,
-                    draft.notes,
-                ),
+            profile_snapshot = json.dumps(
+                {
+                    "company_name": profile.company_name,
+                    "address": profile.address,
+                    "gst_number": profile.gst_number,
+                    "email": profile.email,
+                    "phone": profile.phone,
+                    "bank_details": profile.bank_details,
+                    "default_template_id": profile.default_template_id,
+                    "invoice_prefix": profile.invoice_prefix,
+                    "quote_prefix": profile.quote_prefix,
+                }
             )
-            for item in items:
+
+            if draft.document_type == "QUOTE":
+                quote_id = str(uuid4())
+                quote_number = f"{profile.quote_prefix}-{profile.next_quote_number:04d}"
                 cur.execute(
                     """
-                    INSERT INTO invoice_items (
-                        id, invoice_id, description, quantity, unit_price, discount_cents, discount_percent, line_total
+                    INSERT INTO quotes (
+                        id, user_id, client_id, profile_snapshot, quote_number, template_id,
+                        subtotal_cents, gst_cents, total_cents, notes
                     )
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                    VALUES (%s, %s, %s, %s::jsonb, %s, %s, %s, %s, %s, %s)
                     """,
                     (
-                        str(uuid4()),
-                        invoice_id,
-                        item.description,
-                        item.quantity,
-                        item.unit_price_cents,
-                        item.discount_cents,
-                        item.discount_percent,
-                        item.line_total_cents,
+                        quote_id,
+                        user["id"],
+                        draft.client_id,
+                        profile_snapshot,
+                        quote_number,
+                        profile.default_template_id,
+                        draft_subtotal,
+                        draft_gst,
+                        draft_total,
+                        draft.notes,
                     ),
                 )
-            cur.execute("UPDATE invoice_drafts SET status = 'GENERATED', updated_at = NOW() WHERE id = %s", (draft_row["id"],))
-            cur.execute("UPDATE users SET invoice_count_this_month = invoice_count_this_month + 1, updated_at = NOW() WHERE id = %s", (user["id"],))
-            cur.execute(
-                """
-                UPDATE profiles
-                SET next_invoice_number = next_invoice_number + 1, updated_at = NOW()
-                WHERE user_id = %s
-                """,
-                (user["id"],),
-            )
+                for item in items:
+                    cur.execute(
+                        """
+                        INSERT INTO quote_items (
+                            id, quote_id, description, quantity, unit_price, discount_cents, discount_percent, line_total
+                        )
+                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                        """,
+                        (
+                            str(uuid4()),
+                            quote_id,
+                            item.description,
+                            item.quantity,
+                            item.unit_price_cents,
+                            item.discount_cents,
+                            item.discount_percent,
+                            item.line_total_cents,
+                        ),
+                    )
+                cur.execute("UPDATE invoice_drafts SET status = 'GENERATED', updated_at = NOW() WHERE id = %s", (draft_row["id"],))
+                cur.execute(
+                    """
+                    UPDATE profiles
+                    SET next_quote_number = next_quote_number + 1, updated_at = NOW()
+                    WHERE user_id = %s
+                    """,
+                    (user["id"],),
+                )
+            else:
+                invoice_id = str(uuid4())
+                invoice_number = f"{profile.invoice_prefix}-{profile.next_invoice_number:04d}"
+                cur.execute(
+                    """
+                    INSERT INTO invoices (
+                        id, user_id, client_id, profile_snapshot, invoice_number, template_id,
+                        source_quote_id, subtotal_cents, gst_cents, total_cents, notes
+                    )
+                    VALUES (%s, %s, %s, %s::jsonb, %s, %s, %s, %s, %s, %s, %s)
+                    """,
+                    (
+                        invoice_id,
+                        user["id"],
+                        draft.client_id,
+                        profile_snapshot,
+                        invoice_number,
+                        profile.default_template_id,
+                        draft.source_quote_id,
+                        draft_subtotal,
+                        draft_gst,
+                        draft_total,
+                        draft.notes,
+                    ),
+                )
+                for item in items:
+                    cur.execute(
+                        """
+                        INSERT INTO invoice_items (
+                            id, invoice_id, description, quantity, unit_price, discount_cents, discount_percent, line_total
+                        )
+                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                        """,
+                        (
+                            str(uuid4()),
+                            invoice_id,
+                            item.description,
+                            item.quantity,
+                            item.unit_price_cents,
+                            item.discount_cents,
+                            item.discount_percent,
+                            item.line_total_cents,
+                        ),
+                    )
+                cur.execute("UPDATE invoice_drafts SET status = 'GENERATED', updated_at = NOW() WHERE id = %s", (draft_row["id"],))
+                cur.execute("UPDATE users SET invoice_count_this_month = invoice_count_this_month + 1, updated_at = NOW() WHERE id = %s", (user["id"],))
+                cur.execute(
+                    """
+                    UPDATE profiles
+                    SET next_invoice_number = next_invoice_number + 1, updated_at = NOW()
+                    WHERE user_id = %s
+                    """,
+                    (user["id"],),
+                )
+                if draft.source_quote_id:
+                    cur.execute(
+                        """
+                        UPDATE quotes
+                        SET converted_invoice_id = %s,
+                            converted_at = NOW()
+                        WHERE id = %s
+                        """,
+                        (invoice_id, draft.source_quote_id),
+                    )
             conn.commit()
             return draft
 
@@ -749,10 +891,58 @@ class PostgresRepository:
                 history.append(
                     InvoiceDraft(
                         user_id=user_id,
+                        document_type="INVOICE",
                         items=items,
                         client_id=invoice.get("client_id"),
                         notes=invoice.get("notes") or "",
                         created_at=invoice.get("created_at") or _utcnow(),
+                    )
+                )
+            return history
+
+    def list_quotes(self, user_id: str) -> list[InvoiceDraft]:
+        user = self._ensure_user(user_id)
+        with self._connect() as conn, conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT id, client_id, notes, created_at
+                FROM quotes
+                WHERE user_id = %s
+                ORDER BY created_at DESC
+                LIMIT 50
+                """,
+                (user["id"],),
+            )
+            quotes = cur.fetchall()
+            history: list[InvoiceDraft] = []
+            for quote in quotes:
+                cur.execute(
+                    """
+                    SELECT description, quantity, unit_price, discount_cents, discount_percent
+                    FROM quote_items
+                    WHERE quote_id = %s
+                    ORDER BY id ASC
+                    """,
+                    (quote["id"],),
+                )
+                items = [
+                    InvoiceItem(
+                        description=row["description"],
+                        quantity=float(row["quantity"]),
+                        unit_price_cents=int(row["unit_price"]),
+                        discount_cents=int(row.get("discount_cents") or 0),
+                        discount_percent=float(row["discount_percent"]) if row.get("discount_percent") is not None else None,
+                    )
+                    for row in cur.fetchall()
+                ]
+                history.append(
+                    InvoiceDraft(
+                        user_id=user_id,
+                        document_type="QUOTE",
+                        items=items,
+                        client_id=quote.get("client_id"),
+                        notes=quote.get("notes") or "",
+                        created_at=quote.get("created_at") or _utcnow(),
                     )
                 )
             return history
@@ -839,6 +1029,62 @@ class PostgresRepository:
                 (to_email, user["id"], invoice_number),
             )
             conn.commit()
+
+    def record_quote_email(self, user_id: str, quote_number: str, to_email: str) -> None:
+        user = self._ensure_user(user_id)
+        with self._connect() as conn, conn.cursor() as cur:
+            cur.execute(
+                """
+                UPDATE quotes
+                SET emailed_to = %s,
+                    emailed_at = NOW()
+                WHERE user_id = %s AND quote_number = %s
+                """,
+                (to_email, user["id"], quote_number),
+            )
+            conn.commit()
+
+    def convert_quote_to_invoice_draft(self, user_id: str, quote_number: str) -> InvoiceDraft | None:
+        user = self._ensure_user(user_id)
+        with self._connect() as conn, conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT id, client_id, notes, created_at
+                FROM quotes
+                WHERE user_id = %s AND quote_number = %s
+                LIMIT 1
+                """,
+                (user["id"], quote_number),
+            )
+            quote_row = cur.fetchone()
+            if not quote_row:
+                return None
+            cur.execute(
+                """
+                SELECT description, quantity, unit_price, discount_cents, discount_percent
+                FROM quote_items
+                WHERE quote_id = %s
+                ORDER BY id ASC
+                """,
+                (quote_row["id"],),
+            )
+            items = [
+                InvoiceItem(
+                    description=row["description"],
+                    quantity=float(row["quantity"]),
+                    unit_price_cents=int(row["unit_price"]),
+                    discount_cents=int(row.get("discount_cents") or 0),
+                    discount_percent=float(row["discount_percent"]) if row.get("discount_percent") is not None else None,
+                )
+                for row in cur.fetchall()
+            ]
+
+        draft = self.create_draft(user_id, document_type="INVOICE")
+        draft.client_id = quote_row.get("client_id")
+        draft.source_quote_id = quote_row["id"]
+        draft.notes = quote_row.get("notes") or ""
+        draft.items = items
+        return self.save_draft(draft)
 
     def list_promotion_preferences(self, user_id: str) -> list[str]:
         user = self._ensure_user(user_id)

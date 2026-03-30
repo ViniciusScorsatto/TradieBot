@@ -28,6 +28,7 @@ model User {
   clients                      Client[]
   invoiceDrafts                InvoiceDraft[]
   invoices                     Invoice[]
+  quotes                       Quote[]
   tickets                      Ticket[]
   payments                     Payment[]
   promotionPreferences         PromotionPreference[]
@@ -49,6 +50,8 @@ model Profile {
   defaultTemplateId String   @default("classic-blue") @map("default_template_id")
   invoicePrefix     String   @default("INV") @map("invoice_prefix")
   nextInvoiceNumber Int      @default(1) @map("next_invoice_number")
+  quotePrefix       String   @default("QUO") @map("quote_prefix")
+  nextQuoteNumber   Int      @default(1) @map("next_quote_number")
   createdAt         DateTime @default(now()) @map("created_at")
   updatedAt         DateTime @updatedAt @map("updated_at")
   user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -69,6 +72,7 @@ model Client {
   user      User          @relation(fields: [userId], references: [id], onDelete: Cascade)
   invoices  Invoice[]
   drafts    InvoiceDraft[]
+  quotes    Quote[]
 
   @@map("clients")
 }
@@ -77,6 +81,8 @@ model InvoiceDraft {
   id            String            @id @default(cuid())
   userId        String            @map("user_id")
   clientId      String?           @map("client_id")
+  documentType  String            @default("INVOICE") @map("document_type")
+  sourceQuoteId String?           @map("source_quote_id")
   status        String            @default("ACTIVE")
   notes         String?
   subtotalCents Int               @default(0) @map("subtotal_cents")
@@ -110,6 +116,7 @@ model Invoice {
   id              String      @id @default(cuid())
   userId          String      @map("user_id")
   clientId        String?     @map("client_id")
+  sourceQuoteId   String?     @map("source_quote_id")
   profileSnapshot Json        @map("profile_snapshot")
   invoiceNumber   String      @map("invoice_number")
   templateId      String      @map("template_id")
@@ -126,6 +133,44 @@ model Invoice {
   items           InvoiceItem[]
 
   @@map("invoices")
+}
+
+model Quote {
+  id                String      @id @default(cuid())
+  userId            String      @map("user_id")
+  clientId          String?     @map("client_id")
+  profileSnapshot   Json        @map("profile_snapshot")
+  quoteNumber       String      @map("quote_number")
+  templateId        String      @map("template_id")
+  subtotalCents     Int         @map("subtotal_cents")
+  gstCents          Int         @map("gst_cents")
+  totalCents        Int         @map("total_cents")
+  notes             String?
+  emailedTo         String?     @map("emailed_to")
+  emailedAt         DateTime?   @map("emailed_at")
+  convertedInvoiceId String?    @map("converted_invoice_id")
+  convertedAt       DateTime?   @map("converted_at")
+  createdAt         DateTime    @default(now()) @map("created_at")
+  user              User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  client            Client?     @relation(fields: [clientId], references: [id])
+  items             QuoteItem[]
+
+  @@unique([userId, quoteNumber])
+  @@map("quotes")
+}
+
+model QuoteItem {
+  id              String   @id @default(cuid())
+  quoteId         String   @map("quote_id")
+  description     String
+  quantity        Float
+  unitPrice       Int      @map("unit_price")
+  discountCents   Int      @default(0) @map("discount_cents")
+  discountPercent Float?   @map("discount_percent")
+  lineTotal       Int      @map("line_total")
+  quote           Quote    @relation(fields: [quoteId], references: [id], onDelete: Cascade)
+
+  @@map("quote_items")
 }
 
 model InvoiceItem {

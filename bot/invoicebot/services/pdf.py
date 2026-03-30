@@ -158,6 +158,7 @@ def _draw_summary(
     page_right: float,
     content_width: float,
     summary_title_y: float,
+    summary_title: str,
 ) -> None:
     summary_x = page_left + 275
     summary_width = content_width - 275
@@ -165,7 +166,7 @@ def _draw_summary(
     pdf.rect(summary_x, summary_title_y - 20, summary_width, 24, fill=1, stroke=0)
     pdf.setFillColor(colors.HexColor("#535862"))
     pdf.setFont("Helvetica-Bold", 11)
-    pdf.drawCentredString(summary_x + (summary_width / 2), summary_title_y - 12, "Invoice Summary")
+    pdf.drawCentredString(summary_x + (summary_width / 2), summary_title_y - 12, summary_title)
     pdf.setFont("Helvetica", 8)
     pdf.drawRightString(page_right - 8, summary_title_y - 4, "NZD")
 
@@ -229,6 +230,7 @@ def _draw_first_page_header(
     client: Client | None,
     accent,
     template_name: str,
+    document_label: str,
     width: float,
     height: float,
     page_left: float,
@@ -240,7 +242,7 @@ def _draw_first_page_header(
 
     pdf.setFillColor(colors.HexColor("#636a73"))
     pdf.setFont("Helvetica-Bold", 10)
-    pdf.drawRightString(page_right, height - 58, "INVOICE")
+    pdf.drawRightString(page_right, height - 58, document_label)
     pdf.setFont("Helvetica", 10)
     pdf.drawRightString(page_right, height - 74, template_name)
 
@@ -287,14 +289,24 @@ def _draw_first_page_header(
     return top_box_y
 
 
-def render_invoice_pdf(profile: Profile, draft: InvoiceDraft, client: Client | None) -> bytes:
+def _render_document_pdf(
+    profile: Profile,
+    draft: InvoiceDraft,
+    client: Client | None,
+    *,
+    document_label: str,
+    number_label: str,
+    number_value: str,
+    summary_title: str,
+    include_due_date: bool,
+) -> bytes:
     template = get_template(profile.default_template_id)
     buffer = BytesIO()
     pdf = canvas.Canvas(buffer, pagesize=A4)
     width, height = A4
 
     if len(draft.items) > MAX_ITEMS_PER_INVOICE:
-        raise ValueError(f"Invoices are limited to {MAX_ITEMS_PER_INVOICE} items.")
+        raise ValueError(f"{document_label.title()}s are limited to {MAX_ITEMS_PER_INVOICE} items.")
 
     accent = colors.HexColor(template.accent)
     page_left = 35
@@ -306,22 +318,25 @@ def render_invoice_pdf(profile: Profile, draft: InvoiceDraft, client: Client | N
         client=client,
         accent=accent,
         template_name=template.name,
+        document_label=document_label,
         width=width,
         height=height,
         page_left=page_left,
         page_right=page_right,
     )
 
-    invoice_number = f"{profile.invoice_prefix}-{profile.next_invoice_number:04d}"
-    invoice_date = draft.created_at.strftime("%b %d, %Y")
+    document_date = draft.created_at.strftime("%b %d, %Y")
     due_date = (draft.created_at + timedelta(days=7)).strftime("%b %d, %Y")
 
     meta_y = top_box_y - 182
     pdf.setFillColor(colors.black)
     pdf.setFont("Helvetica-Bold", 10.5)
-    pdf.drawString(page_left, meta_y, f"Invoice No : {invoice_number}")
-    pdf.drawString(page_left + 280, meta_y, f"Due Date : {due_date}")
-    pdf.drawString(page_left, meta_y - 20, f"Invoice Date : {invoice_date}")
+    pdf.drawString(page_left, meta_y, f"{number_label} : {number_value}")
+    if include_due_date:
+        pdf.drawString(page_left + 280, meta_y, f"Due Date : {due_date}")
+        pdf.drawString(page_left, meta_y - 20, f"{document_label.title()} Date : {document_date}")
+    else:
+        pdf.drawString(page_left, meta_y - 20, f"{document_label.title()} Date : {document_date}")
 
     table_top = meta_y - 52
     item_pages = [draft.items[index:index + ROWS_PER_PAGE] for index in range(0, len(draft.items), ROWS_PER_PAGE)]
@@ -338,7 +353,7 @@ def render_invoice_pdf(profile: Profile, draft: InvoiceDraft, client: Client | N
         pdf.rect(0, height - 26, width, 26, fill=1, stroke=0)
         pdf.setFillColor(colors.HexColor("#636a73"))
         pdf.setFont("Helvetica-Bold", 10)
-        pdf.drawString(page_left, height - 58, f"Invoice No : {invoice_number}")
+        pdf.drawString(page_left, height - 58, f"{number_label} : {number_value}")
         pdf.drawRightString(page_right, height - 58, f"Page 2 of 2")
         pdf.setFont("Helvetica", 10)
         pdf.drawString(page_left, height - 74, f"Client: {client.name if client else 'No client selected'}")
@@ -355,6 +370,7 @@ def render_invoice_pdf(profile: Profile, draft: InvoiceDraft, client: Client | N
         page_right=page_right,
         content_width=content_width,
         summary_title_y=y - 4,
+        summary_title=summary_title,
     )
     _draw_payment_details(
         pdf,
@@ -367,3 +383,31 @@ def render_invoice_pdf(profile: Profile, draft: InvoiceDraft, client: Client | N
     pdf.showPage()
     pdf.save()
     return buffer.getvalue()
+
+
+def render_invoice_pdf(profile: Profile, draft: InvoiceDraft, client: Client | None) -> bytes:
+    invoice_number = f"{profile.invoice_prefix}-{profile.next_invoice_number:04d}"
+    return _render_document_pdf(
+        profile,
+        draft,
+        client,
+        document_label="INVOICE",
+        number_label="Invoice No",
+        number_value=invoice_number,
+        summary_title="Invoice Summary",
+        include_due_date=True,
+    )
+
+
+def render_quote_pdf(profile: Profile, draft: InvoiceDraft, client: Client | None) -> bytes:
+    quote_number = f"{profile.quote_prefix}-{profile.next_quote_number:04d}"
+    return _render_document_pdf(
+        profile,
+        draft,
+        client,
+        document_label="QUOTE",
+        number_label="Quote No",
+        number_value=quote_number,
+        summary_title="Quote Summary",
+        include_due_date=False,
+    )

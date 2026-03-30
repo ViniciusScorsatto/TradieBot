@@ -11,14 +11,14 @@ from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Message, Update
 from telegram.ext import ContextTypes
 from PIL import Image
 
-from invoicebot.models import InvoiceItem, SupportTicket
+from invoicebot.models import DocumentType, InvoiceItem, SupportTicket
 from invoicebot.services.billing import evaluate_quota
 from invoicebot.services.checkout import create_checkout_session
 from invoicebot.services.compliance import taxable_supply_gaps
 from invoicebot.services.emailing import send_invoice_email
 from invoicebot.services.mock_data import seed_mock_clients
 from invoicebot.services.parser import parse_line_items
-from invoicebot.services.pdf import render_invoice_pdf
+from invoicebot.services.pdf import render_invoice_pdf, render_quote_pdf
 from invoicebot.services.support_ai import BugSupportRequest, generate_bug_triage_reply
 from invoicebot.services.storage import Repository
 from invoicebot.services.tax import discount_total_cents, gst_cents, gst_summary_label, gross_subtotal_cents, total_cents
@@ -67,6 +67,36 @@ PROMOTION_CATEGORIES = (
 )
 
 
+def _document_title(document_type: DocumentType) -> str:
+    return "Quote" if document_type == "QUOTE" else "Invoice"
+
+
+def _document_title_plural(document_type: DocumentType) -> str:
+    return "Quotes" if document_type == "QUOTE" else "Invoices"
+
+
+def _generate_command_for(document_type: DocumentType) -> str:
+    return "/generatequote" if document_type == "QUOTE" else "/generate"
+
+
+def _history_command_for(document_type: DocumentType) -> str:
+    return "/quotes" if document_type == "QUOTE" else "/history"
+
+
+def _mode_for_items(document_type: DocumentType) -> str:
+    return "quote_items" if document_type == "QUOTE" else "invoice_items"
+
+
+def _mode_for_client_select(document_type: DocumentType) -> str:
+    return "quote_client_select" if document_type == "QUOTE" else "invoice_client_select"
+
+
+def _document_type_for_mode(mode: str | None) -> DocumentType:
+    if mode in {"quote_items", "quote_client_select", "quotes_history_select"}:
+        return "QUOTE"
+    return "INVOICE"
+
+
 def _support_ai_followup_keyboard(ticket_id: str) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         [
@@ -94,10 +124,11 @@ def _render_history_page(
     user_id: str,
     *,
     page: int,
+    document_type: DocumentType = "INVOICE",
 ) -> tuple[str, InlineKeyboardMarkup | None]:
-    history = repo.list_history(user_id)
+    history = repo.list_quotes(user_id) if document_type == "QUOTE" else repo.list_history(user_id)
     if not history:
-        return "No invoices generated yet.", None
+        return f"No {_document_title_plural(document_type).lower()} generated yet.", None
 
     profile = repo.get_or_create_profile(user_id)
     total_pages = max((len(history) - 1) // HISTORY_PAGE_SIZE + 1, 1)
@@ -113,16 +144,16 @@ def _render_history_page(
     buttons: list[list[InlineKeyboardButton]] = []
     nav_row: list[InlineKeyboardButton] = []
     if page > 0:
-        nav_row.append(InlineKeyboardButton("Prev", callback_data=f"history_page:{page - 1}"))
+        nav_row.append(InlineKeyboardButton("Prev", callback_data=f"{document_type.lower()}_history_page:{page - 1}"))
     if page < total_pages - 1:
-        nav_row.append(InlineKeyboardButton("Next", callback_data=f"history_page:{page + 1}"))
+        nav_row.append(InlineKeyboardButton("Next", callback_data=f"{document_type.lower()}_history_page:{page + 1}"))
     if nav_row:
         buttons.append(nav_row)
 
     return (
-        f"Recent invoices (page {page + 1}/{total_pages}):\n"
+        f"Recent {_document_title_plural(document_type).lower()} (page {page + 1}/{total_pages}):\n"
         + "\n".join(lines)
-        + "\n\nSend the invoice number as text to load that one again.",
+        + f"\n\nSend the {_document_title(document_type).lower()} number as text to load that one again.",
         InlineKeyboardMarkup(buttons) if buttons else None,
     )
 
@@ -133,10 +164,11 @@ async def _send_history_page(
     user_id: str,
     *,
     page: int,
+    document_type: DocumentType = "INVOICE",
 ) -> None:
     if not message:
         return
-    text, reply_markup = _render_history_page(repo, user_id, page=page)
+    text, reply_markup = _render_history_page(repo, user_id, page=page, document_type=document_type)
     await message.reply_text(text, reply_markup=reply_markup)
 
 
@@ -267,12 +299,18 @@ async def _send_temporary_status(message: Message | None, text: str) -> Message 
     return await message.reply_text(text)
 
 
-async def _validate_invoice_item_limit(message: Message | None, current_count: int, incoming_count: int) -> bool:
+async def _validate_invoice_item_limit(
+    message: Message | None,
+    current_count: int,
+    incoming_count: int,
+    *,
+    document_type: DocumentType = "INVOICE",
+) -> bool:
     if current_count + incoming_count <= MAX_INVOICE_ITEMS:
         return True
     if message:
         await message.reply_text(
-            f"Invoices can have up to {MAX_INVOICE_ITEMS} items so the PDF stays within 2 clean pages. "
+            f"{_document_title_plural(document_type)} can have up to {MAX_INVOICE_ITEMS} items so the PDF stays within 2 clean pages. "
             f"You currently have {current_count} item(s)."
         )
     return False
@@ -542,11 +580,7 @@ def _clients_keyboard(clients, *, page: int = 0, query: str = "") -> InlineKeybo
     return InlineKeyboardMarkup(rows)
 
 
-def _invoice_client_keyboard(clients) -> InlineKeyboardMarkup:
-    return _invoice_client_keyboard_page(clients, page=0, query="")
-
-
-def _invoice_client_keyboard_page(clients, *, page: int = 0, query: str = "") -> InlineKeyboardMarkup:
+def _document_client_keyboard_page(clients, *, document_type: DocumentType, page: int = 0, query: str = "") -> InlineKeyboardMarkup:
     filtered = _filtered_clients(clients, query)
     total_pages = max(1, (len(filtered) + CLIENTS_PAGE_SIZE - 1) // CLIENTS_PAGE_SIZE)
     safe_page = max(0, min(page, total_pages - 1))
@@ -554,17 +588,17 @@ def _invoice_client_keyboard_page(clients, *, page: int = 0, query: str = "") ->
     visible_clients = filtered[start:start + CLIENTS_PAGE_SIZE]
     rows: list[list[InlineKeyboardButton]] = []
     for index, client in enumerate(visible_clients):
-        rows.append([InlineKeyboardButton(f"{start + index + 1}. {client.name}", callback_data=f"pick_client:{client.id}")])
+        rows.append([InlineKeyboardButton(f"{start + index + 1}. {client.name}", callback_data=f"pick_client:{document_type}:{client.id}")])
     navigation: list[InlineKeyboardButton] = []
     if safe_page > 0:
-        navigation.append(InlineKeyboardButton("Prev", callback_data=f"invoice_clients_page:{safe_page - 1}"))
+        navigation.append(InlineKeyboardButton("Prev", callback_data=f"{document_type.lower()}_clients_page:{safe_page - 1}"))
     if safe_page < total_pages - 1:
-        navigation.append(InlineKeyboardButton("Next", callback_data=f"invoice_clients_page:{safe_page + 1}"))
+        navigation.append(InlineKeyboardButton("Next", callback_data=f"{document_type.lower()}_clients_page:{safe_page + 1}"))
     if navigation:
         rows.append(navigation)
     if query:
-        rows.append([InlineKeyboardButton("Clear search", callback_data="invoice_clients_clear_search")])
-    rows.append([InlineKeyboardButton("Skip client", callback_data="skip_step:invoice_client_select")])
+        rows.append([InlineKeyboardButton("Clear search", callback_data=f"{document_type.lower()}_clients_clear_search")])
+    rows.append([InlineKeyboardButton("Skip client", callback_data=f"skip_step:{_mode_for_client_select(document_type)}")])
     return InlineKeyboardMarkup(rows)
 
 
@@ -617,11 +651,22 @@ async def _send_clients_list(message: Message | None, clients, *, page: int = 0,
     )
 
 
-async def _send_invoice_client_picker(message: Message | None, clients, *, page: int = 0, query: str = "") -> None:
+async def _send_document_client_picker(
+    message: Message | None,
+    clients,
+    *,
+    document_type: DocumentType,
+    page: int = 0,
+    query: str = "",
+) -> None:
     if not message:
         return
     if not clients:
-        await _send_invoice_items_prompt(message, "Invoice draft started. No saved clients found.")
+        await _send_document_items_prompt(
+            message,
+            document_type=document_type,
+            prefix=f"{_document_title(document_type)} draft started. No saved clients found.",
+        )
         return
     filtered = _filtered_clients(clients, query)
     if not filtered:
@@ -630,8 +675,8 @@ async def _send_invoice_client_picker(message: Message | None, clients, *, page:
             parse_mode="Markdown",
             reply_markup=InlineKeyboardMarkup(
                 [
-                    [InlineKeyboardButton("Clear search", callback_data="invoice_clients_clear_search")],
-                    [InlineKeyboardButton("Skip client", callback_data="skip_step:invoice_client_select")],
+                    [InlineKeyboardButton("Clear search", callback_data=f"{document_type.lower()}_clients_clear_search")],
+                    [InlineKeyboardButton("Skip client", callback_data=f"skip_step:{_mode_for_client_select(document_type)}")],
                 ]
             ),
         )
@@ -641,7 +686,7 @@ async def _send_invoice_client_picker(message: Message | None, clients, *, page:
     start = safe_page * CLIENTS_PAGE_SIZE
     visible_clients = filtered[start:start + CLIENTS_PAGE_SIZE]
     lines = "\n".join(f"{start + index + 1}. {_client_summary(client)}" for index, client in enumerate(visible_clients))
-    header = f"Invoice draft started. Choose a saved client (page {safe_page + 1}/{total_pages}), or skip this for now."
+    header = f"{_document_title(document_type)} draft started. Choose a saved client (page {safe_page + 1}/{total_pages}), or skip this for now."
     if query:
         header += f"\nSearch: `{query}`"
     await message.reply_text(
@@ -650,7 +695,7 @@ async def _send_invoice_client_picker(message: Message | None, clients, *, page:
         + lines
         + "\n\nSend at least 3 starting letters to search by client name or company.",
         parse_mode="Markdown",
-        reply_markup=_invoice_client_keyboard_page(clients, page=safe_page, query=query),
+        reply_markup=_document_client_keyboard_page(clients, document_type=document_type, page=safe_page, query=query),
     )
 
 
@@ -702,13 +747,23 @@ def _invoice_limit_keyboard(settings) -> InlineKeyboardMarkup:
     )
 
 
-def _post_generate_keyboard(*, can_email: bool) -> InlineKeyboardMarkup | None:
-    if not can_email:
+def _post_generate_keyboard(*, can_email: bool, can_convert: bool = False) -> InlineKeyboardMarkup | None:
+    rows: list[list[InlineKeyboardButton]] = []
+    if can_email:
+        rows.append([InlineKeyboardButton("Email to client", callback_data="email_last_document")])
+    if can_convert:
+        rows.append([InlineKeyboardButton("Convert to invoice", callback_data="convert_last_quote")])
+    if not rows:
         return None
-    return InlineKeyboardMarkup([[InlineKeyboardButton("Email to client", callback_data="email_last_invoice")]])
+    return InlineKeyboardMarkup(rows)
 
 
-async def _send_invoice_items_prompt(message: Message | None, prefix: str | None = None) -> None:
+async def _send_document_items_prompt(
+    message: Message | None,
+    *,
+    document_type: DocumentType,
+    prefix: str | None = None,
+) -> None:
     if not message:
         return
     lead = f"{prefix}\n\n" if prefix else ""
@@ -716,7 +771,7 @@ async def _send_invoice_items_prompt(message: Message | None, prefix: str | None
         lead
         + "Now send line items like:\n"
         + "`Garden tidy x 2 at $95`\n`Cleaning supplies $45`\n\n"
-        + "You can send multiple lines at once, then use /generate.",
+        + f"You can send multiple lines at once, then use {_generate_command_for(document_type)}.",
         parse_mode="Markdown",
     )
 
@@ -797,8 +852,8 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     promo_line = ", /promotions to control affiliate offers" if settings.promotions_enabled else ""
     await update.message.reply_text(
         f"{DEVELOPMENT_NOTICE}\n\n"
-        "InvoiceBot helps small businesses and independent operators create invoices from voice or text in Telegram.\n\n"
-        f"Use /profile to set up your business, /template to pick a layout, /invoice to start a draft{promo_line}."
+        "InvoiceBot helps small businesses and independent operators create invoices and quotes from voice or text in Telegram.\n\n"
+        f"Use /profile to set up your business, /template to pick a layout, /invoice to start an invoice draft, or /quote to build a quote{promo_line}."
     )
 
 
@@ -826,24 +881,41 @@ async def mockclients_command(update: Update, context: ContextTypes.DEFAULT_TYPE
     await update.message.reply_text(f"Created {created} mock clients for this staging account.")
 
 
-async def invoice_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+async def _start_document_command(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+    *,
+    document_type: DocumentType,
+) -> None:
     if not _is_user_allowed(update, context):
         await _deny_access(update, context)
         return
     repo = _repo(context)
     user_id = _user_key(update)
-    draft = repo.create_draft(user_id)
+    draft = repo.create_draft(user_id, document_type=document_type)
     clients = repo.list_clients(user_id)
     if clients:
-        context.user_data["mode"] = "invoice_client_select"
-        context.user_data["invoice_clients_page"] = 0
-        context.user_data["invoice_clients_query"] = ""
-        await _send_invoice_client_picker(update.message, clients, page=0, query="")
+        context.user_data["mode"] = _mode_for_client_select(document_type)
+        context.user_data[f"{document_type.lower()}_clients_page"] = 0
+        context.user_data[f"{document_type.lower()}_clients_query"] = ""
+        await _send_document_client_picker(update.message, clients, document_type=document_type, page=0, query="")
     else:
-        context.user_data["mode"] = "invoice_items"
-        await _send_invoice_items_prompt(update.message, "Invoice draft started. No saved clients found.")
+        context.user_data["mode"] = _mode_for_items(document_type)
+        await _send_document_items_prompt(
+            update.message,
+            document_type=document_type,
+            prefix=f"{_document_title(document_type)} draft started. No saved clients found.",
+        )
     if not draft.items:
         return
+
+
+async def invoice_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    await _start_document_command(update, context, document_type="INVOICE")
+
+
+async def quote_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    await _start_document_command(update, context, document_type="QUOTE")
 
 
 async def generate_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -853,7 +925,7 @@ async def generate_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     repo = _repo(context)
     user_id = _user_key(update)
     draft = repo.get_draft(user_id)
-    if not draft or not draft.items:
+    if not draft or draft.document_type != "INVOICE" or not draft.items:
         await update.message.reply_text("Start with /invoice and add at least one line item first.")
         return
     profile = repo.get_or_create_profile(user_id)
@@ -893,6 +965,37 @@ async def generate_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     summary_lines.append(f"Total: ${total_cents(draft, profile) / 100:.2f}")
     await update.message.reply_text(
         f"Please confirm this invoice:\n\n"
+        f"Client: {client.name if client else 'No client selected'}\n\n"
+        f"{lines}\n\n"
+        + "\n".join(summary_lines),
+        reply_markup=keyboard,
+    )
+
+
+async def generatequote_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if not _is_user_allowed(update, context):
+        await _deny_access(update, context)
+        return
+    repo = _repo(context)
+    user_id = _user_key(update)
+    draft = repo.get_draft(user_id)
+    if not draft or draft.document_type != "QUOTE" or not draft.items:
+        await update.message.reply_text("Start with /quote and add at least one line item first.")
+        return
+    client = repo.get_client(user_id, draft.client_id) if draft.client_id else None
+    profile = repo.get_or_create_profile(user_id)
+    lines = "\n".join(f"- {_item_line_body(item)}" for item in draft.items)
+    keyboard = InlineKeyboardMarkup(
+        [[InlineKeyboardButton("Yes, generate PDF", callback_data="confirm_generate_quote")],
+         [InlineKeyboardButton("Edit draft", callback_data="edit_draft")]]
+    )
+    summary_lines = [f"Subtotal: ${gross_subtotal_cents(draft) / 100:.2f}"]
+    if discount_total_cents(draft):
+        summary_lines.append(f"Discounts: -${discount_total_cents(draft) / 100:.2f}")
+    summary_lines.append(f"{gst_summary_label(profile)}: ${gst_cents(draft, profile) / 100:.2f}")
+    summary_lines.append(f"Total: ${total_cents(draft, profile) / 100:.2f}")
+    await update.message.reply_text(
+        f"Please confirm this quote:\n\n"
         f"Client: {client.name if client else 'No client selected'}\n\n"
         f"{lines}\n\n"
         + "\n".join(summary_lines),
@@ -995,7 +1098,18 @@ async def history_command(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     user_id = _user_key(update)
     context.user_data["mode"] = "history_select"
     context.user_data["history_page"] = 0
-    await _send_history_page(update.message, repo, user_id, page=0)
+    await _send_history_page(update.message, repo, user_id, page=0, document_type="INVOICE")
+
+
+async def quotes_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if not _is_user_allowed(update, context):
+        await _deny_access(update, context)
+        return
+    repo = _repo(context)
+    user_id = _user_key(update)
+    context.user_data["mode"] = "quotes_history_select"
+    context.user_data["quotes_history_page"] = 0
+    await _send_history_page(update.message, repo, user_id, page=0, document_type="QUOTE")
 
 
 async def repeat_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -1063,11 +1177,17 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         await update.message.reply_text("Send text here, or use /profile if you want to upload a logo.")
         return
 
-    if mode == "invoice_items":
-        draft = repo.get_draft(user_id) or repo.create_draft(user_id)
+    if mode in {"invoice_items", "quote_items"}:
+        document_type = _document_type_for_mode(mode)
+        draft = repo.get_draft(user_id) or repo.create_draft(user_id, document_type=document_type)
         try:
             new_items = parse_line_items(text)
-            if not await _validate_invoice_item_limit(update.message, len(draft.items), len(new_items)):
+            if not await _validate_invoice_item_limit(
+                update.message,
+                len(draft.items),
+                len(new_items),
+                document_type=document_type,
+            ):
                 return
             start_index = len(draft.items)
             draft.items.extend(new_items)
@@ -1090,10 +1210,13 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     if mode == "edit_draft_item":
         draft = repo.get_draft(user_id)
         item_index = context.user_data.get("edit_item_index")
+        item_mode = _mode_for_items(draft.document_type if draft else "INVOICE")
         if draft is None or item_index is None or not (0 <= item_index < len(draft.items)):
-            context.user_data["mode"] = "invoice_items"
+            context.user_data["mode"] = item_mode
             context.user_data.pop("edit_item_index", None)
-            await update.message.reply_text("That draft item is no longer available. Use /invoice to continue.")
+            await update.message.reply_text(
+                f"That draft item is no longer available. Use {'/quote' if item_mode == 'quote_items' else '/invoice'} to continue."
+            )
             return
         try:
             replacement_items = parse_line_items(text)
@@ -1111,7 +1234,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             return
         draft.items[item_index] = replacement_items[0]
         repo.save_draft(draft)
-        context.user_data["mode"] = "invoice_items"
+        context.user_data["mode"] = item_mode
         context.user_data.pop("edit_item_index", None)
         await update.message.reply_text(
             f"Updated item {item_index + 1}.\n\n{_item_line(replacement_items[0], item_index)}\n\nDiscount for this item:",
@@ -1122,11 +1245,14 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     if mode in {"discount_percent_item", "discount_value_item"}:
         draft = repo.get_draft(user_id)
         item_index = context.user_data.get("discount_item_index")
+        item_mode = _mode_for_items(draft.document_type if draft else "INVOICE")
         if draft is None or item_index is None or not (0 <= item_index < len(draft.items)):
-            context.user_data["mode"] = "invoice_items"
+            context.user_data["mode"] = item_mode
             context.user_data.pop("discount_item_index", None)
             context.user_data.pop("discount_kind", None)
-            await update.message.reply_text("That draft item is no longer available. Use /invoice to continue.")
+            await update.message.reply_text(
+                f"That draft item is no longer available. Use {'/quote' if item_mode == 'quote_items' else '/invoice'} to continue."
+            )
             return
 
         item = draft.items[item_index]
@@ -1163,7 +1289,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         )
         draft.items[item_index] = updated_item
         repo.save_draft(draft)
-        context.user_data["mode"] = "invoice_items"
+        context.user_data["mode"] = item_mode
         context.user_data.pop("discount_item_index", None)
         context.user_data.pop("discount_kind", None)
         await update.message.reply_text(
@@ -1175,17 +1301,18 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         )
         return
 
-    if mode == "invoice_client_select":
-        draft = repo.get_draft(user_id) or repo.create_draft(user_id)
+    if mode in {"invoice_client_select", "quote_client_select"}:
+        document_type = _document_type_for_mode(mode)
+        draft = repo.get_draft(user_id) or repo.create_draft(user_id, document_type=document_type)
         if text.lower() == "skip":
-            context.user_data["mode"] = "invoice_items"
-            await _send_invoice_items_prompt(update.message, "No client selected.")
+            context.user_data["mode"] = _mode_for_items(document_type)
+            await _send_document_items_prompt(update.message, document_type=document_type, prefix="No client selected.")
             return
 
         clients = repo.list_clients(user_id)
-        filtered = _filtered_clients(clients, context.user_data.get("invoice_clients_query", ""))
+        filtered = _filtered_clients(clients, context.user_data.get(f"{document_type.lower()}_clients_query", ""))
         total_pages = max(1, (len(filtered) + CLIENTS_PAGE_SIZE - 1) // CLIENTS_PAGE_SIZE)
-        page = max(0, min(context.user_data.get("invoice_clients_page", 0), total_pages - 1))
+        page = max(0, min(context.user_data.get(f"{document_type.lower()}_clients_page", 0), total_pages - 1))
         start = page * CLIENTS_PAGE_SIZE
         visible_clients = filtered[start:start + CLIENTS_PAGE_SIZE]
 
@@ -1201,9 +1328,9 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
                     parse_mode="Markdown",
                 )
                 return
-            context.user_data["invoice_clients_query"] = text
-            context.user_data["invoice_clients_page"] = 0
-            await _send_invoice_client_picker(update.message, clients, page=0, query=text)
+            context.user_data[f"{document_type.lower()}_clients_query"] = text
+            context.user_data[f"{document_type.lower()}_clients_page"] = 0
+            await _send_document_client_picker(update.message, clients, document_type=document_type, page=0, query=text)
             return
 
         if not client_id:
@@ -1220,8 +1347,37 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
         draft.client_id = client.id
         repo.save_draft(draft)
-        context.user_data["mode"] = "invoice_items"
-        await _send_invoice_items_prompt(update.message, f"Selected client: {client.name}.")
+        context.user_data["mode"] = _mode_for_items(document_type)
+        await _send_document_items_prompt(
+            update.message,
+            document_type=document_type,
+            prefix=f"Selected client: {client.name}.",
+        )
+        return
+
+    if mode == "quotes_history_select":
+        history = repo.list_quotes(user_id)
+        if not history:
+            context.user_data["mode"] = None
+            await update.message.reply_text("No quotes generated yet.")
+            return
+        if not text.isdigit():
+            await update.message.reply_text(
+                "Send the quote number from the list above, or use Prev / Next to browse more history."
+            )
+            return
+        history_index = int(text) - 1
+        if history_index < 0 or history_index >= len(history):
+            await update.message.reply_text(
+                "That quote number is not available in history. Send a visible number from the list, or browse with Prev / Next."
+            )
+            return
+        new_draft = replace(history[history_index], document_type="QUOTE")
+        repo.save_draft(new_draft)
+        context.user_data["mode"] = None
+        await update.message.reply_text(
+            "That quote is now loaded as a new draft. Use /generatequote, or send more items to adjust it first."
+        )
         return
 
     if mode == "profile_company_name":
@@ -1506,7 +1662,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         return
 
     await update.message.reply_text(
-        "Use /invoice to start a draft, /profile to set up your business, or /support if you need help."
+        "Use /invoice or /quote to start a draft, /profile to set up your business, or /support if you need help."
     )
 
 
@@ -1516,13 +1672,14 @@ async def _handle_voice_message(update: Update, context: ContextTypes.DEFAULT_TY
         return
 
     mode = context.user_data.get("mode")
-    if mode != "invoice_items":
-        await message.reply_text("Voice notes are only supported while you are in an active /invoice draft.")
+    if mode not in {"invoice_items", "quote_items"}:
+        await message.reply_text("Voice notes are only supported while you are in an active /invoice or /quote draft.")
         return
+    document_type = _document_type_for_mode(mode)
 
     voice = message.voice or message.audio
     if not voice:
-        await message.reply_text("Send a Telegram voice note or audio file during an invoice draft.")
+        await message.reply_text("Send a Telegram voice note or audio file during an active draft.")
         return
 
     settings = context.application.bot_data["settings"]
@@ -1569,17 +1726,22 @@ async def _handle_voice_message(update: Update, context: ContextTypes.DEFAULT_TY
         except Exception:
             await message.reply_text(
                 "I couldn't transcribe that voice note.\n\n"
-                "You are still in the same invoice draft. Send another voice note now, or switch to text for this item.",
+                f"You are still in the same {_document_title(document_type).lower()} draft. Send another voice note now, or switch to text for this item.",
                 reply_markup=_voice_retry_keyboard(),
             )
             return
         finally:
             await _clear_temporary_status(loading_message)
 
-    draft = repo.get_draft(user_id) or repo.create_draft(user_id)
+    draft = repo.get_draft(user_id) or repo.create_draft(user_id, document_type=document_type)
     try:
         new_items = parse_line_items(transcript)
-        if not await _validate_invoice_item_limit(message, len(draft.items), len(new_items)):
+        if not await _validate_invoice_item_limit(
+            message,
+            len(draft.items),
+            len(new_items),
+            document_type=document_type,
+        ):
             return
         start_index = len(draft.items)
         draft.items.extend(new_items)
@@ -1601,9 +1763,9 @@ async def _handle_voice_message(update: Update, context: ContextTypes.DEFAULT_TY
         )
     except ValueError:
         await message.reply_text(
-            "I transcribed the voice note, but couldn't turn it into invoice line items.\n\n"
+            "I transcribed the voice note, but couldn't turn it into line items.\n\n"
             f"Transcript:\n{transcript}\n\n"
-            "You are still in the same invoice draft. Send another voice note or type the item manually.",
+            f"You are still in the same {_document_title(document_type).lower()} draft. Send another voice note or type the item manually.",
             parse_mode="Markdown",
             reply_markup=_voice_retry_keyboard(show_examples=True),
         )
@@ -1623,7 +1785,8 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 
     if query.data == "edit_draft":
         draft = repo.get_draft(user_id)
-        await query.edit_message_text("Draft still open. Use the controls below or send more line items.")
+        draft_title = _document_title(draft.document_type if draft else "INVOICE").lower()
+        await query.edit_message_text(f"{draft_title.title()} draft still open. Use the controls below or send more line items.")
         await _send_draft_editor(query.message, draft)
         return
 
@@ -1666,11 +1829,19 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         )
         return
 
-    if query.data.startswith("history_page:"):
+    if query.data.startswith("history_page:") or query.data.startswith("invoice_history_page:"):
         page = int(query.data.split(":", 1)[1])
         context.user_data["history_page"] = page
         context.user_data["mode"] = "history_select"
-        text, reply_markup = _render_history_page(repo, user_id, page=page)
+        text, reply_markup = _render_history_page(repo, user_id, page=page, document_type="INVOICE")
+        await query.edit_message_text(text, reply_markup=reply_markup)
+        return
+
+    if query.data.startswith("quote_history_page:"):
+        page = int(query.data.split(":", 1)[1])
+        context.user_data["quotes_history_page"] = page
+        context.user_data["mode"] = "quotes_history_select"
+        text, reply_markup = _render_history_page(repo, user_id, page=page, document_type="QUOTE")
         await query.edit_message_text(text, reply_markup=reply_markup)
         return
 
@@ -1765,31 +1936,35 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         await _send_clients_list(query.message, repo.list_clients(user_id), page=0, query="")
         return
 
-    if query.data.startswith("invoice_clients_page:"):
+    if query.data.startswith("invoice_clients_page:") or query.data.startswith("quote_clients_page:"):
+        document_type: DocumentType = "QUOTE" if query.data.startswith("quote_clients_page:") else "INVOICE"
         page = int(query.data.split(":", 1)[1])
-        context.user_data["invoice_clients_page"] = page
-        await query.edit_message_text("Updated invoice client list.")
-        await _send_invoice_client_picker(
+        context.user_data[f"{document_type.lower()}_clients_page"] = page
+        await query.edit_message_text(f"Updated {_document_title(document_type).lower()} client list.")
+        await _send_document_client_picker(
             query.message,
             repo.list_clients(user_id),
+            document_type=document_type,
             page=page,
-            query=context.user_data.get("invoice_clients_query", ""),
+            query=context.user_data.get(f"{document_type.lower()}_clients_query", ""),
         )
         return
 
-    if query.data == "invoice_clients_clear_search":
-        context.user_data["invoice_clients_query"] = ""
-        context.user_data["invoice_clients_page"] = 0
-        await query.edit_message_text("Showing all invoice clients.")
-        await _send_invoice_client_picker(query.message, repo.list_clients(user_id), page=0, query="")
+    if query.data in {"invoice_clients_clear_search", "quote_clients_clear_search"}:
+        document_type: DocumentType = "QUOTE" if query.data.startswith("quote_") else "INVOICE"
+        context.user_data[f"{document_type.lower()}_clients_query"] = ""
+        context.user_data[f"{document_type.lower()}_clients_page"] = 0
+        await query.edit_message_text(f"Showing all {_document_title(document_type).lower()} clients.")
+        await _send_document_client_picker(query.message, repo.list_clients(user_id), document_type=document_type, page=0, query="")
         return
 
     if query.data.startswith("skip_step:"):
         step = query.data.split(":", 1)[1]
-        if step == "invoice_client_select":
-            context.user_data["mode"] = "invoice_items"
+        if step in {"invoice_client_select", "quote_client_select"}:
+            document_type = _document_type_for_mode(step)
+            context.user_data["mode"] = _mode_for_items(document_type)
             await query.edit_message_text("No client selected.")
-            await _send_invoice_items_prompt(query.message)
+            await _send_document_items_prompt(query.message, document_type=document_type)
             return
         if step == "profile_company_name":
             context.user_data["mode"] = "profile_address"
@@ -1892,17 +2067,18 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             return
 
     if query.data.startswith("pick_client:"):
-        client_id = query.data.split(":", 1)[1]
-        draft = repo.get_draft(user_id) or repo.create_draft(user_id)
+        _, document_type_raw, client_id = query.data.split(":", 2)
+        document_type: DocumentType = "QUOTE" if document_type_raw == "QUOTE" else "INVOICE"
+        draft = repo.get_draft(user_id) or repo.create_draft(user_id, document_type=document_type)
         client = repo.get_client(user_id, client_id)
         if not client:
             await query.edit_message_text("That client is no longer available. Choose another client or skip.")
             return
         draft.client_id = client.id
         repo.save_draft(draft)
-        context.user_data["mode"] = "invoice_items"
+        context.user_data["mode"] = _mode_for_items(document_type)
         await query.edit_message_text(f"Selected client: {client.name}.")
-        await _send_invoice_items_prompt(query.message)
+        await _send_document_items_prompt(query.message, document_type=document_type)
         return
 
     if query.data.startswith("client_edit:"):
@@ -1953,7 +2129,7 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         draft = repo.get_draft(user_id)
         item_index = int(query.data.split(":", 1)[1])
         if not draft or not (0 <= item_index < len(draft.items)):
-            await query.edit_message_text("That item is no longer available. Use /invoice to continue.")
+            await query.edit_message_text("That item is no longer available. Use /invoice or /quote to continue.")
             return
         context.user_data["mode"] = "edit_draft_item"
         context.user_data["edit_item_index"] = item_index
@@ -1966,7 +2142,7 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         draft = repo.get_draft(user_id)
         item_index = int(query.data.split(":", 1)[1])
         if not draft or not (0 <= item_index < len(draft.items)):
-            await query.edit_message_text("That item is no longer available. Use /invoice to continue.")
+            await query.edit_message_text("That item is no longer available. Use /invoice or /quote to continue.")
             return
         removed_item = draft.items.pop(item_index)
         repo.save_draft(draft)
@@ -1985,7 +2161,7 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         draft = repo.get_draft(user_id)
         item_index = int(query.data.split(":", 1)[1])
         if not draft or not (0 <= item_index < len(draft.items)):
-            await query.edit_message_text("That item is no longer available. Use /invoice to continue.")
+            await query.edit_message_text("That item is no longer available. Use /invoice or /quote to continue.")
             return
         item = draft.items[item_index]
         context.user_data["mode"] = "discount_percent_item"
@@ -2004,7 +2180,7 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         draft = repo.get_draft(user_id)
         item_index = int(query.data.split(":", 1)[1])
         if not draft or not (0 <= item_index < len(draft.items)):
-            await query.edit_message_text("That item is no longer available. Use /invoice to continue.")
+            await query.edit_message_text("That item is no longer available. Use /invoice or /quote to continue.")
             return
         item = draft.items[item_index]
         context.user_data["mode"] = "discount_value_item"
@@ -2032,7 +2208,7 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     if query.data == "voice_retry_prompt":
         await query.edit_message_text(
             "You can retry voice right now.\n\n"
-            "Send another voice note in this same invoice draft, or switch to text if it’s quicker."
+            "Send another voice note in this same draft, or switch to text if it’s quicker."
         )
         return
 
@@ -2084,7 +2260,7 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 
     if query.data == "confirm_generate":
         draft = repo.get_draft(user_id)
-        if not draft:
+        if not draft or draft.document_type != "INVOICE":
             await query.edit_message_text("Draft expired. Start again with /invoice.")
             return
         profile = repo.get_or_create_profile(user_id)
@@ -2099,11 +2275,12 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             filename = f"{invoice_number}.pdf"
             await query.message.reply_document(document=pdf_bytes, filename=filename)
             if client and client.email:
-                context.user_data["last_generated_invoice"] = {
+                context.user_data["last_generated_document"] = {
+                    "document_type": "INVOICE",
                     "pdf_base64": base64.b64encode(pdf_bytes).decode("ascii"),
                     "client_email": client.email,
                     "client_name": client.name,
-                    "invoice_number": invoice_number,
+                    "document_number": invoice_number,
                     "filename": filename,
                     "reply_to": profile.email,
                 }
@@ -2120,11 +2297,52 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             await _clear_temporary_status(loading_message)
         return
 
-    if query.data == "email_last_invoice":
-        last_invoice = context.user_data.get("last_generated_invoice")
+    if query.data == "confirm_generate_quote":
+        draft = repo.get_draft(user_id)
+        if not draft or draft.document_type != "QUOTE":
+            await query.edit_message_text("Draft expired. Start again with /quote.")
+            return
+        profile = repo.get_or_create_profile(user_id)
+        client = repo.get_client(user_id, draft.client_id) if draft.client_id else None
+        quote_number = f"{profile.quote_prefix}-{profile.next_quote_number:04d}"
+        loading_message = await _send_temporary_status(query.message, "Generating quote PDF...")
+        try:
+            pdf_bytes = render_quote_pdf(profile, draft, client)
+            repo.finalize_draft(user_id)
+            await query.edit_message_text("Quote generated and sent below.")
+            filename = f"{quote_number}.pdf"
+            await query.message.reply_document(document=pdf_bytes, filename=filename)
+            context.user_data["last_generated_document"] = {
+                "document_type": "QUOTE",
+                "pdf_base64": base64.b64encode(pdf_bytes).decode("ascii"),
+                "client_email": client.email if client and client.email else "",
+                "client_name": client.name if client else "there",
+                "document_number": quote_number,
+                "filename": filename,
+                "reply_to": profile.email,
+            }
+            if client and client.email:
+                await query.message.reply_text(
+                    f"Next step: send {quote_number} to {client.email}, or convert it into an invoice draft?",
+                    reply_markup=_post_generate_keyboard(can_email=True, can_convert=True),
+                )
+            else:
+                await query.message.reply_text(
+                    "This quote has been generated. You can convert it into an invoice draft now, or add a client email in /clients for one-tap sending.",
+                    reply_markup=_post_generate_keyboard(can_email=False, can_convert=True),
+                )
+        finally:
+            await _clear_temporary_status(loading_message)
+        return
+
+    if query.data == "email_last_document":
+        last_document = context.user_data.get("last_generated_document") or context.user_data.get("last_generated_invoice")
         settings = context.application.bot_data["settings"]
-        if not last_invoice:
-            await query.edit_message_text("I can't find a recent generated invoice to email. Generate the invoice again first.")
+        if not last_document:
+            await query.edit_message_text("I can't find a recent generated document to email. Generate it again first.")
+            return
+        if not last_document.get("client_email"):
+            await query.edit_message_text("The selected client has no email saved yet. Add one in /clients first.")
             return
         loading_message = await _send_temporary_status(query.message, "Sending invoice email...")
         try:
@@ -2132,24 +2350,44 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
                 mailjet_api_key=settings.mailjet_api_key,
                 mailjet_secret_key=settings.mailjet_secret_key,
                 email_from=settings.email_from,
-                to_email=last_invoice["client_email"],
-                subject=f"Invoice {last_invoice['invoice_number']}",
+                to_email=last_document["client_email"],
+                subject=f"{_document_title(last_document.get('document_type', 'INVOICE'))} {last_document['document_number']}",
                 body_text=(
-                    f"Hi {last_invoice['client_name']},\n\n"
-                    f"Please find attached invoice {last_invoice['invoice_number']}.\n\n"
+                    f"Hi {last_document['client_name']},\n\n"
+                    f"Please find attached {_document_title(last_document.get('document_type', 'INVOICE')).lower()} {last_document['document_number']}.\n\n"
                     "Thank you."
                 ),
-                pdf_bytes=base64.b64decode(last_invoice["pdf_base64"]),
-                filename=last_invoice["filename"],
-                reply_to=last_invoice.get("reply_to") or None,
+                pdf_bytes=base64.b64decode(last_document["pdf_base64"]),
+                filename=last_document["filename"],
+                reply_to=last_document.get("reply_to") or None,
             )
-            repo.record_invoice_email(user_id, last_invoice["invoice_number"], last_invoice["client_email"])
-            await query.edit_message_text(f"Invoice emailed to {last_invoice['client_email']}.")
+            if last_document.get("document_type") == "QUOTE":
+                repo.record_quote_email(user_id, last_document["document_number"], last_document["client_email"])
+            else:
+                repo.record_invoice_email(user_id, last_document["document_number"], last_document["client_email"])
+            await query.edit_message_text(
+                f"{_document_title(last_document.get('document_type', 'INVOICE'))} emailed to {last_document['client_email']}."
+            )
         except ValueError as exc:
             await query.edit_message_text(f"Email sending is not fully configured yet: {exc}")
         except Exception:
-            print("Invoice email failed:")
+            print("Document email failed:")
             print(traceback.format_exc())
-            await query.edit_message_text("I couldn't send that invoice email right now. Please try again in a moment.")
+            await query.edit_message_text("I couldn't send that email right now. Please try again in a moment.")
         finally:
             await _clear_temporary_status(loading_message)
+        return
+
+    if query.data == "convert_last_quote":
+        last_document = context.user_data.get("last_generated_document")
+        if not last_document or last_document.get("document_type") != "QUOTE":
+            await query.edit_message_text("I can't find a recent quote to convert. Generate the quote again first.")
+            return
+        draft = repo.convert_quote_to_invoice_draft(user_id, last_document["document_number"])
+        if not draft:
+            await query.edit_message_text("I couldn't reload that quote. Open /quotes and try again.")
+            return
+        context.user_data["mode"] = "invoice_items"
+        await query.edit_message_text(
+            "This quote is now loaded as a new invoice draft. Use /generate, or adjust items first."
+        )

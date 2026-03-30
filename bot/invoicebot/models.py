@@ -4,6 +4,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Literal
 
+DocumentType = Literal["INVOICE", "QUOTE"]
 
 TemplateId = Literal[
     "classic-blue",
@@ -43,6 +44,8 @@ class Profile:
     default_template_id: TemplateId = "classic-blue"
     invoice_prefix: str = "INV"
     next_invoice_number: int = 1
+    quote_prefix: str = "QUO"
+    next_quote_number: int = 1
 
 
 @dataclass(slots=True)
@@ -58,8 +61,10 @@ class Client:
 @dataclass(slots=True)
 class InvoiceDraft:
     user_id: str
+    document_type: DocumentType = "INVOICE"
     items: list[InvoiceItem] = field(default_factory=list)
     client_id: str | None = None
+    source_quote_id: str | None = None
     notes: str = ""
     created_at: datetime = field(default_factory=datetime.utcnow)
 

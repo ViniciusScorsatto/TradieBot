@@ -8,6 +8,7 @@ from telegram.ext import Application, CallbackQueryHandler, CommandHandler, Mess
 from invoicebot.config import Settings
 from invoicebot.handlers.commands import (
     clients_command,
+    generatequote_command,
     generate_command,
     handle_callback,
     handle_message,
@@ -18,6 +19,8 @@ from invoicebot.handlers.commands import (
     new_client_command,
     profile_command,
     promotions_command,
+    quote_command,
+    quotes_command,
     repeat_command,
     start_command,
     support_command,
@@ -34,11 +37,14 @@ def _bot_commands(settings: Settings) -> list[BotCommand]:
         BotCommand("start", "Start InvoiceBot"),
         BotCommand("invoice", "Start a new invoice"),
         BotCommand("generate", "Generate the invoice PDF"),
+        BotCommand("quote", "Start a new quote"),
+        BotCommand("generatequote", "Generate the quote PDF"),
         BotCommand("profile", "Set up your business details"),
         BotCommand("template", "Choose your invoice template"),
         BotCommand("newclient", "Add a new client"),
         BotCommand("clients", "View or edit saved clients"),
         BotCommand("history", "View recent invoices"),
+        BotCommand("quotes", "View recent quotes"),
         BotCommand("repeat", "Repeat your latest invoice"),
         BotCommand("support", "Send a bug or improvement ticket"),
     ]
@@ -63,11 +69,14 @@ def build_application() -> Application:
     application.add_handler(CommandHandler("mockclients", mockclients_command))
     application.add_handler(CommandHandler("invoice", invoice_command))
     application.add_handler(CommandHandler("generate", generate_command))
+    application.add_handler(CommandHandler("quote", quote_command))
+    application.add_handler(CommandHandler("generatequote", generatequote_command))
     application.add_handler(CommandHandler("profile", profile_command))
     application.add_handler(CommandHandler("template", template_command))
     application.add_handler(CommandHandler("newclient", new_client_command))
     application.add_handler(CommandHandler("clients", clients_command))
     application.add_handler(CommandHandler("history", history_command))
+    application.add_handler(CommandHandler("quotes", quotes_command))
     application.add_handler(CommandHandler("repeat", repeat_command))
     application.add_handler(CommandHandler("support", support_command))
     application.add_handler(CommandHandler("promotions", promotions_command))
