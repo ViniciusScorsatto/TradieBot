@@ -55,6 +55,7 @@ LOGO_MAX_WIDTH = 5000
 LOGO_MAX_HEIGHT = 5000
 ALLOWED_LOGO_MIME_TYPES = {"image/png", "image/jpeg"}
 CLIENTS_PAGE_SIZE = 6
+HISTORY_PAGE_SIZE = 8
 MAX_INVOICE_ITEMS = 14
 PROMOTION_CATEGORIES = (
     ("tools", "Tools"),
@@ -75,6 +76,69 @@ def _support_ai_followup_keyboard(ticket_id: str) -> InlineKeyboardMarkup:
             ]
         ]
     )
+
+
+def _history_client_label(repo: Repository, user_id: str, draft) -> str:
+    if not draft.client_id:
+        return "No client"
+    client = repo.get_client(user_id, draft.client_id)
+    if not client:
+        return "No client"
+    if client.company and client.name:
+        return f"{client.company} - {client.name}"
+    return client.company or client.name or "No client"
+
+
+def _render_history_page(
+    repo: Repository,
+    user_id: str,
+    *,
+    page: int,
+) -> tuple[str, InlineKeyboardMarkup | None]:
+    history = repo.list_history(user_id)
+    if not history:
+        return "No invoices generated yet.", None
+
+    profile = repo.get_or_create_profile(user_id)
+    total_pages = max((len(history) - 1) // HISTORY_PAGE_SIZE + 1, 1)
+    page = max(0, min(page, total_pages - 1))
+    start = page * HISTORY_PAGE_SIZE
+    visible = history[start : start + HISTORY_PAGE_SIZE]
+
+    lines = [
+        f"{start + index + 1}. {_history_client_label(repo, user_id, draft)} - ${total_cents(draft, profile) / 100:.2f}"
+        for index, draft in enumerate(visible)
+    ]
+
+    buttons = [
+        [InlineKeyboardButton(f"Repeat {start + index + 1}", callback_data=f"history_repeat:{start + index}")]
+        for index, _ in enumerate(visible)
+    ]
+    nav_row: list[InlineKeyboardButton] = []
+    if page > 0:
+        nav_row.append(InlineKeyboardButton("Prev", callback_data=f"history_page:{page - 1}"))
+    if page < total_pages - 1:
+        nav_row.append(InlineKeyboardButton("Next", callback_data=f"history_page:{page + 1}"))
+    if nav_row:
+        buttons.append(nav_row)
+
+    return (
+        f"Recent invoices (page {page + 1}/{total_pages}):\n" + "\n".join(lines),
+        InlineKeyboardMarkup(buttons),
+    )
+
+
+async def _send_history_page(
+    message: Message | None,
+    repo: Repository,
+    user_id: str,
+    *,
+    page: int,
+) -> None:
+    if not message:
+        return
+    text, reply_markup = _render_history_page(repo, user_id, page=page)
+    await message.reply_text(text, reply_markup=reply_markup)
 
 
 def _user_key(update: Update) -> str:
@@ -929,16 +993,9 @@ async def history_command(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         await _deny_access(update, context)
         return
     repo = _repo(context)
-    profile = repo.get_or_create_profile(_user_key(update))
-    history = repo.list_history(_user_key(update))
-    if not history:
-        await update.message.reply_text("No invoices generated yet.")
-        return
-    lines = [
-        f"{index + 1}. {draft.items[0].description if draft.items else 'Invoice'} - ${total_cents(draft, profile) / 100:.2f}"
-        for index, draft in enumerate(history[:10])
-    ]
-    await update.message.reply_text("Recent invoices:\n" + "\n".join(lines))
+    user_id = _user_key(update)
+    context.user_data["history_page"] = 0
+    await _send_history_page(update.message, repo, user_id, page=0)
 
 
 async def repeat_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -952,7 +1009,9 @@ async def repeat_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         return
     new_draft = replace(history[0])
     repo.save_draft(new_draft)
-    await update.message.reply_text("Loaded your most recent invoice as a new draft. Use /generate or send more items.")
+    await update.message.reply_text(
+        "Loaded your most recent invoice as a new draft. Use /generate, send more items, or open /history to repeat a specific invoice."
+    )
 
 
 async def support_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -1579,6 +1638,27 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         await query.edit_message_reply_markup(reply_markup=None)
         await query.message.reply_text(
             "No problem. I’ve marked this for human follow-up, and we’ll continue in Telegram."
+        )
+        return
+
+    if query.data.startswith("history_page:"):
+        page = int(query.data.split(":", 1)[1])
+        context.user_data["history_page"] = page
+        text, reply_markup = _render_history_page(repo, user_id, page=page)
+        await query.edit_message_text(text, reply_markup=reply_markup)
+        return
+
+    if query.data.startswith("history_repeat:"):
+        history_index = int(query.data.split(":", 1)[1])
+        history = repo.list_history(user_id)
+        if history_index < 0 or history_index >= len(history):
+            await query.edit_message_text("That invoice is no longer available in history.")
+            return
+        new_draft = replace(history[history_index])
+        repo.save_draft(new_draft)
+        await query.edit_message_text("Loaded that invoice as a new draft.")
+        await query.message.reply_text(
+            "That invoice is now loaded as a new draft. Use /generate, or send more items to adjust it first."
         )
         return
 
