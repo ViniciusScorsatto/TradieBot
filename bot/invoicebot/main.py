@@ -37,15 +37,15 @@ def _bot_commands(settings: Settings) -> list[BotCommand]:
         BotCommand("start", "Start InvoiceBot"),
         BotCommand("invoice", "Start a new invoice"),
         BotCommand("generate", "Generate the invoice PDF"),
+        BotCommand("history", "View recent invoices"),
+        BotCommand("repeat", "Repeat your latest invoice"),
         BotCommand("quote", "Start a new quote"),
         BotCommand("generatequote", "Generate the quote PDF"),
+        BotCommand("quotes", "View recent quotes"),
         BotCommand("profile", "Set up your business details"),
         BotCommand("template", "Choose your invoice template"),
         BotCommand("newclient", "Add a new client"),
         BotCommand("clients", "View or edit saved clients"),
-        BotCommand("history", "View recent invoices"),
-        BotCommand("quotes", "View recent quotes"),
-        BotCommand("repeat", "Repeat your latest invoice"),
         BotCommand("support", "Send a bug or improvement ticket"),
     ]
     if settings.promotions_enabled:
