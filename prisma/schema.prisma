@@ -33,6 +33,7 @@ model User {
   payments                     Payment[]
   promotionPreferences         PromotionPreference[]
   promotionDeliveries          PromotionDelivery[]
+  trackingSession              TimeTrackingSession?
 
   @@map("users")
 }
@@ -52,6 +53,7 @@ model Profile {
   nextInvoiceNumber Int      @default(1) @map("next_invoice_number")
   quotePrefix       String   @default("QUO") @map("quote_prefix")
   nextQuoteNumber   Int      @default(1) @map("next_quote_number")
+  defaultHourlyRateCents Int @default(0) @map("default_hourly_rate_cents")
   createdAt         DateTime @default(now()) @map("created_at")
   updatedAt         DateTime @updatedAt @map("updated_at")
   user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -171,6 +173,17 @@ model QuoteItem {
   quote           Quote    @relation(fields: [quoteId], references: [id], onDelete: Cascade)
 
   @@map("quote_items")
+}
+
+model TimeTrackingSession {
+  id        String   @id @default(cuid())
+  userId    String   @unique @map("user_id")
+  draftId   String   @map("draft_id")
+  startedAt DateTime @map("started_at")
+  createdAt DateTime @default(now()) @map("created_at")
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("time_tracking_sessions")
 }
 
 model InvoiceItem {

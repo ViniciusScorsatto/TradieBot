@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import base64
 from dataclasses import replace
-import base64
+from datetime import UTC, datetime
 from io import BytesIO
 from tempfile import NamedTemporaryFile
 import traceback
@@ -20,6 +20,7 @@ from invoicebot.services.mock_data import seed_mock_clients
 from invoicebot.services.parser import parse_line_items
 from invoicebot.services.pdf import render_invoice_pdf, render_quote_pdf
 from invoicebot.services.support_ai import BugSupportRequest, generate_bug_triage_reply
+from invoicebot.services.tracking import build_tracked_item, round_tracked_hours
 from invoicebot.services.storage import Repository
 from invoicebot.services.tax import discount_total_cents, gst_cents, gst_summary_label, gross_subtotal_cents, total_cents
 from invoicebot.services.template_catalog import TEMPLATES
@@ -358,6 +359,44 @@ def _format_minutes_from_seconds(seconds: int) -> str:
     if minutes.is_integer():
         return f"{int(minutes)}"
     return f"{minutes:.1f}"
+
+
+def _format_clock(dt: datetime) -> str:
+    local_value = dt.astimezone()
+    return local_value.strftime("%I:%M %p").lstrip("0")
+
+
+def _hourly_rate_prompt(profile) -> str:
+    current = (
+        f"Current default tracked-labour rate: ${profile.default_hourly_rate_cents / 100:.2f}/hr.\n\n"
+        if profile.default_hourly_rate_cents
+        else ""
+    )
+    return (
+        current
+        + "Now send your default hourly rate for tracked labour, for example `95` or `$95`.\n\n"
+        + "This will be used when you start and stop `/tracking` inside an invoice draft."
+    )
+
+
+def _parse_hourly_rate_cents(text: str) -> int:
+    cleaned = text.strip().replace("$", "")
+    try:
+        value = float(cleaned)
+    except ValueError as exc:
+        raise ValueError("Send an hourly rate like `95` or `$95`.") from exc
+    if value <= 0:
+        raise ValueError("Hourly rate must be greater than zero.")
+    return int(round(value * 100))
+
+
+async def _reply_stop_tracking_first(message: Message | None) -> None:
+    if not message:
+        return
+    await message.reply_text(
+        "You already have tracked time running on an invoice draft.\n\n"
+        "Send /tracking to stop it before starting or loading a different draft."
+    )
 
 
 def _skip_keyboard(step: str, *, label: str = "Skip") -> InlineKeyboardMarkup:
@@ -863,7 +902,7 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     await update.message.reply_text(
         f"{DEVELOPMENT_NOTICE}\n\n"
         "InvoiceBot helps small businesses and independent operators create invoices and quotes from voice or text in Telegram.\n\n"
-        f"Use /profile to set up your business, /template to pick a layout, /invoice to start an invoice draft, or /quote to build a quote{promo_line}."
+        f"Use /profile to set up your business, /template to pick a layout, /invoice to start an invoice draft, /tracking to bill tracked labour hours, or /quote to build a quote{promo_line}."
     )
 
 
@@ -902,6 +941,9 @@ async def _start_document_command(
         return
     repo = _repo(context)
     user_id = _user_key(update)
+    if repo.get_active_tracking(user_id):
+        await _reply_stop_tracking_first(update.message)
+        return
     draft = repo.create_draft(user_id, document_type=document_type)
     clients = repo.list_clients(user_id)
     if clients:
@@ -928,6 +970,65 @@ async def quote_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     await _start_document_command(update, context, document_type="QUOTE")
 
 
+async def tracking_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if not _is_user_allowed(update, context):
+        await _deny_access(update, context)
+        return
+    if not update.message:
+        return
+
+    repo = _repo(context)
+    user_id = _user_key(update)
+    profile = repo.get_or_create_profile(user_id)
+    active_session = repo.get_active_tracking(user_id)
+
+    if active_session:
+        session = repo.stop_tracking(user_id)
+        if not session:
+            await update.message.reply_text("I couldn't find the active timer anymore. Start again with /tracking.")
+            return
+        draft = repo.get_draft(user_id)
+        if not draft or draft.document_type != "INVOICE" or not draft.id or session.draft_id != draft.id:
+            await update.message.reply_text(
+                "That tracked session couldn't be attached because there is no active invoice draft anymore.\n\n"
+                "Start a fresh /invoice draft, then use /tracking again."
+            )
+            return
+        elapsed_seconds = max(int((datetime.now(UTC) - session.started_at).total_seconds()), 1)
+        item = build_tracked_item(
+            elapsed_seconds=elapsed_seconds,
+            hourly_rate_cents=profile.default_hourly_rate_cents,
+        )
+        if not await _validate_invoice_item_limit(update.message, len(draft.items), 1, document_type="INVOICE"):
+            return
+        draft.items.append(item)
+        repo.save_draft(draft)
+        await update.message.reply_text(
+            f"Tracked {round_tracked_hours(elapsed_seconds):.1f} hours and added it to this invoice draft.\n\n"
+            f"{_item_line(item, len(draft.items) - 1)}\n\n"
+            f"You now have {len(draft.items)} item(s) in this draft."
+        )
+        return
+
+    draft = repo.get_draft(user_id)
+    if not draft or draft.document_type != "INVOICE":
+        await update.message.reply_text("Tracking works inside an active invoice draft only. Start with /invoice first.")
+        return
+    if not draft.id:
+        await update.message.reply_text("I couldn't attach tracking to this draft. Start a fresh /invoice draft and try again.")
+        return
+    if not profile.default_hourly_rate_cents:
+        await update.message.reply_text(
+            "Set your default hourly rate in /profile first, then come back to /tracking."
+        )
+        return
+    session = repo.start_tracking(user_id, draft.id)
+    await update.message.reply_text(
+        f"Tracking started at {_format_clock(session.started_at)}.\n\n"
+        "Send /tracking again when the job finishes."
+    )
+
+
 async def generate_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if not _is_user_allowed(update, context):
         await _deny_access(update, context)
@@ -937,6 +1038,9 @@ async def generate_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     draft = repo.get_draft(user_id)
     if not draft or draft.document_type != "INVOICE" or not draft.items:
         await update.message.reply_text("Start with /invoice and add at least one line item first.")
+        return
+    if repo.get_active_tracking(user_id):
+        await update.message.reply_text("Stop the active tracked session with /tracking before generating this invoice.")
         return
     profile = repo.get_or_create_profile(user_id)
     client = repo.get_client(user_id, draft.client_id) if draft.client_id else None
@@ -1081,6 +1185,11 @@ def _document_number_skip_keyboard(step: str) -> InlineKeyboardMarkup:
     return _skip_keyboard(step, label="Keep current")
 
 
+def _hourly_rate_skip_keyboard(profile) -> InlineKeyboardMarkup:
+    label = "Keep current" if profile.default_hourly_rate_cents else "Skip for now"
+    return _skip_keyboard("profile_hourly_rate", label=label)
+
+
 async def template_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if not _is_user_allowed(update, context):
         await _deny_access(update, context)
@@ -1140,6 +1249,9 @@ async def repeat_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         await _deny_access(update, context)
         return
     repo = _repo(context)
+    if repo.get_active_tracking(_user_key(update)):
+        await _reply_stop_tracking_first(update.message)
+        return
     history = repo.list_history(_user_key(update))
     if not history:
         await update.message.reply_text("No recent invoices to repeat.")
@@ -1384,6 +1496,9 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             context.user_data["mode"] = None
             await update.message.reply_text("No quotes generated yet.")
             return
+        if repo.get_active_tracking(user_id):
+            await _reply_stop_tracking_first(update.message)
+            return
         if not text.isdigit():
             await update.message.reply_text(
                 "Send the quote number from the list above, or use Prev / Next to browse more history."
@@ -1550,13 +1665,37 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     if mode == "profile_quote_start_number":
         profile = repo.get_or_create_profile(user_id)
         if text.lower() == "skip":
-            context.user_data["mode"] = None
-            await update.message.reply_text("Profile saved. Use /template to pick your default invoice layout.")
+            context.user_data["mode"] = "profile_hourly_rate"
+            await update.message.reply_text(
+                _hourly_rate_prompt(profile),
+                parse_mode="Markdown",
+                reply_markup=_hourly_rate_skip_keyboard(profile),
+            )
             return
         if not text.isdigit() or int(text) <= 0:
             await update.message.reply_text("Send a whole number like `1`, `25`, or `100`.", parse_mode="Markdown")
             return
         profile.next_quote_number = int(text)
+        repo.save_profile(user_id, profile)
+        context.user_data["mode"] = "profile_hourly_rate"
+        await update.message.reply_text(
+            _hourly_rate_prompt(profile),
+            parse_mode="Markdown",
+            reply_markup=_hourly_rate_skip_keyboard(profile),
+        )
+        return
+
+    if mode == "profile_hourly_rate":
+        profile = repo.get_or_create_profile(user_id)
+        if text.lower() == "skip":
+            context.user_data["mode"] = None
+            await update.message.reply_text("Profile saved. Use /template to pick your default invoice layout.")
+            return
+        try:
+            profile.default_hourly_rate_cents = _parse_hourly_rate_cents(text)
+        except ValueError as exc:
+            await update.message.reply_text(str(exc), parse_mode="Markdown")
+            return
         repo.save_profile(user_id, profile)
         context.user_data["mode"] = None
         await update.message.reply_text("Profile saved. Use /template to pick your default invoice layout.")
@@ -1644,6 +1783,9 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         if not history:
             context.user_data["mode"] = None
             await update.message.reply_text("No invoices generated yet.")
+            return
+        if repo.get_active_tracking(user_id):
+            await _reply_stop_tracking_first(update.message)
             return
         if not text.isdigit():
             await update.message.reply_text(
@@ -2141,8 +2283,18 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             )
             return
         if step == "profile_quote_start_number":
-            context.user_data["mode"] = None
+            profile = repo.get_or_create_profile(user_id)
+            context.user_data["mode"] = "profile_hourly_rate"
             await query.edit_message_text("Keeping current quote start number.")
+            await query.message.reply_text(
+                _hourly_rate_prompt(profile),
+                parse_mode="Markdown",
+                reply_markup=_hourly_rate_skip_keyboard(profile),
+            )
+            return
+        if step == "profile_hourly_rate":
+            context.user_data["mode"] = None
+            await query.edit_message_text("Skipping default hourly rate for now.")
             await query.message.reply_text("Profile saved. Use /template to pick your default invoice layout.")
             return
         if step == "client_company":
@@ -2490,6 +2642,11 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         return
 
     if query.data == "convert_last_quote":
+        if repo.get_active_tracking(user_id):
+            await query.edit_message_text(
+                "You already have tracked time running on an invoice draft. Send /tracking in Telegram to stop it before converting a quote."
+            )
+            return
         last_document = context.user_data.get("last_generated_document")
         if not last_document or last_document.get("document_type") != "QUOTE":
             await query.edit_message_text("I can't find a recent quote to convert. Generate the quote again first.")

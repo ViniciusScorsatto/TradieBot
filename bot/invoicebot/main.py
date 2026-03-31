@@ -25,6 +25,7 @@ from invoicebot.handlers.commands import (
     start_command,
     support_command,
     template_command,
+    tracking_command,
 )
 from invoicebot.services.storage import InMemoryRepository, PostgresRepository
 
@@ -36,6 +37,7 @@ def _bot_commands(settings: Settings) -> list[BotCommand]:
     commands = [
         BotCommand("start", "Start InvoiceBot"),
         BotCommand("invoice", "Start a new invoice"),
+        BotCommand("tracking", "Start or stop tracked labour"),
         BotCommand("generate", "Generate the invoice PDF"),
         BotCommand("history", "View recent invoices"),
         BotCommand("repeat", "Repeat your latest invoice"),
@@ -68,6 +70,7 @@ def build_application() -> Application:
     application.add_handler(CommandHandler("myid", myid_command))
     application.add_handler(CommandHandler("mockclients", mockclients_command))
     application.add_handler(CommandHandler("invoice", invoice_command))
+    application.add_handler(CommandHandler("tracking", tracking_command))
     application.add_handler(CommandHandler("generate", generate_command))
     application.add_handler(CommandHandler("quote", quote_command))
     application.add_handler(CommandHandler("generatequote", generatequote_command))

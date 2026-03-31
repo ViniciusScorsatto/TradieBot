@@ -8,7 +8,7 @@ from datetime import UTC, datetime
 from typing import Any, DefaultDict, Protocol
 from uuid import uuid4
 
-from invoicebot.models import Client, DocumentType, InvoiceDraft, InvoiceItem, Profile, SupportTicket
+from invoicebot.models import Client, DocumentType, InvoiceDraft, InvoiceItem, Profile, SupportTicket, TrackingSession
 from invoicebot.services.tax import gst_cents, subtotal_cents, total_cents
 
 
@@ -50,6 +50,10 @@ class Repository(Protocol):
     def consume_paid_voice_credit_if_needed(self, user_id: str, free_limit_seconds: int, seconds_used: int) -> None: ...
     def stripe_customer_id(self, user_id: str) -> str | None: ...
     def save_stripe_customer_id(self, user_id: str, customer_id: str) -> None: ...
+    def get_active_tracking(self, user_id: str) -> TrackingSession | None: ...
+    def start_tracking(self, user_id: str, draft_id: str) -> TrackingSession: ...
+    def stop_tracking(self, user_id: str) -> TrackingSession | None: ...
+    def clear_tracking(self, user_id: str) -> None: ...
 
 
 class InMemoryRepository:
@@ -74,6 +78,7 @@ class InMemoryRepository:
         self.promotion_preferences: DefaultDict[str, set[str]] = defaultdict(set)
         self.promotion_consent: dict[str, bool] = {}
         self.promotion_opt_out: dict[str, bool] = {}
+        self.tracking_sessions: dict[str, TrackingSession] = {}
 
     def get_or_create_profile(self, user_id: str) -> Profile:
         profile = self.profiles.get(user_id)
@@ -87,7 +92,7 @@ class InMemoryRepository:
         return profile
 
     def create_draft(self, user_id: str, document_type: DocumentType = "INVOICE") -> InvoiceDraft:
-        draft = InvoiceDraft(user_id=user_id, document_type=document_type)
+        draft = InvoiceDraft(user_id=user_id, id=str(uuid4()), document_type=document_type)
         self.drafts[user_id] = draft
         return draft
 
@@ -201,6 +206,7 @@ class InMemoryRepository:
             quote_draft = record["draft"]
             new_draft = InvoiceDraft(
                 user_id=user_id,
+                id=str(uuid4()),
                 document_type="INVOICE",
                 items=[replace(item) for item in quote_draft.items],
                 client_id=quote_draft.client_id,
@@ -266,6 +272,20 @@ class InMemoryRepository:
     def save_stripe_customer_id(self, user_id: str, customer_id: str) -> None:
         self.stripe_customers[user_id] = customer_id
 
+    def get_active_tracking(self, user_id: str) -> TrackingSession | None:
+        return self.tracking_sessions.get(user_id)
+
+    def start_tracking(self, user_id: str, draft_id: str) -> TrackingSession:
+        session = TrackingSession(user_id=user_id, draft_id=draft_id, started_at=_utcnow())
+        self.tracking_sessions[user_id] = session
+        return session
+
+    def stop_tracking(self, user_id: str) -> TrackingSession | None:
+        return self.tracking_sessions.pop(user_id, None)
+
+    def clear_tracking(self, user_id: str) -> None:
+        self.tracking_sessions.pop(user_id, None)
+
 
 class PostgresRepository:
     def __init__(self, database_url: str | None = None) -> None:
@@ -283,7 +303,7 @@ class PostgresRepository:
     def ensure_schema(self) -> None:
         required_columns = {
             "users": {"id", "telegram_user_id", "invoice_count_this_month", "voice_seconds_this_month", "paid_invoice_credits", "paid_voice_seconds", "promotion_consent_at", "promotion_consent_source", "promotion_opt_out_at"},
-            "profiles": {"id", "user_id", "address", "default_template_id", "next_invoice_number", "quote_prefix", "next_quote_number"},
+            "profiles": {"id", "user_id", "address", "default_template_id", "next_invoice_number", "quote_prefix", "next_quote_number", "default_hourly_rate_cents"},
             "clients": {"id", "user_id", "name", "address"},
             "invoice_drafts": {"id", "user_id", "client_id", "status", "document_type", "source_quote_id", "subtotal_cents", "gst_cents", "total_cents"},
             "invoice_draft_items": {"id", "draft_id", "description", "quantity", "unit_price", "discount_cents", "discount_percent", "line_total"},
@@ -291,6 +311,7 @@ class PostgresRepository:
             "invoice_items": {"id", "invoice_id", "description", "quantity", "unit_price", "discount_cents", "discount_percent", "line_total"},
             "quotes": {"id", "user_id", "client_id", "profile_snapshot", "quote_number", "template_id", "subtotal_cents", "gst_cents", "total_cents", "emailed_to", "emailed_at", "converted_invoice_id", "converted_at"},
             "quote_items": {"id", "quote_id", "description", "quantity", "unit_price", "discount_cents", "discount_percent", "line_total"},
+            "time_tracking_sessions": {"id", "user_id", "draft_id", "started_at"},
             "tickets": {"id", "user_id", "type", "status", "subject", "ai_first_response_sent_at"},
             "ticket_messages": {"id", "ticket_id", "sender", "body"},
             "payments": {"id", "user_id", "stripe_session_id", "stripe_payment_id", "purchase_type", "amount_cents", "credits_purchased", "status"},
@@ -373,6 +394,7 @@ class PostgresRepository:
             next_invoice_number=row.get("next_invoice_number") or 1,
             quote_prefix=row.get("quote_prefix") or "QUO",
             next_quote_number=row.get("next_quote_number") or 1,
+            default_hourly_rate_cents=int(row.get("default_hourly_rate_cents") or 0),
         )
 
     def _row_to_client(self, row: dict) -> Client:
@@ -459,6 +481,7 @@ class PostgresRepository:
                         next_invoice_number = %s,
                         quote_prefix = %s,
                         next_quote_number = %s,
+                        default_hourly_rate_cents = %s,
                         updated_at = NOW()
                     WHERE user_id = %s
                     """,
@@ -475,6 +498,7 @@ class PostgresRepository:
                         profile.next_invoice_number,
                         profile.quote_prefix,
                         profile.next_quote_number,
+                        profile.default_hourly_rate_cents,
                         user["id"],
                     ),
                 )
@@ -484,9 +508,9 @@ class PostgresRepository:
                     INSERT INTO profiles (
                         id, user_id, company_name, address, gst_number, email, phone,
                         bank_details, logo_url, default_template_id, invoice_prefix, next_invoice_number,
-                        quote_prefix, next_quote_number
+                        quote_prefix, next_quote_number, default_hourly_rate_cents
                     )
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                     """,
                     (
                         str(uuid4()),
@@ -503,6 +527,7 @@ class PostgresRepository:
                         profile.next_invoice_number,
                         profile.quote_prefix,
                         profile.next_quote_number,
+                        profile.default_hourly_rate_cents,
                     ),
                 )
             conn.commit()
@@ -513,6 +538,7 @@ class PostgresRepository:
         with self._connect() as conn, conn.cursor() as cur:
             existing = self._active_draft_row(cur, user["id"])
             if existing:
+                draft_id = existing["id"]
                 cur.execute("DELETE FROM invoice_draft_items WHERE draft_id = %s", (existing["id"],))
                 cur.execute(
                     """
@@ -524,15 +550,16 @@ class PostgresRepository:
                     (document_type, existing["id"]),
                 )
             else:
+                draft_id = str(uuid4())
                 cur.execute(
                     """
                     INSERT INTO invoice_drafts (id, user_id, document_type)
                     VALUES (%s, %s, %s)
                     """,
-                    (str(uuid4()), user["id"], document_type),
+                    (draft_id, user["id"], document_type),
                 )
             conn.commit()
-        return InvoiceDraft(user_id=user_id, document_type=document_type)
+        return InvoiceDraft(user_id=user_id, id=draft_id, document_type=document_type)
 
     def get_draft(self, user_id: str) -> InvoiceDraft | None:
         user = self._ensure_user(user_id)
@@ -543,6 +570,7 @@ class PostgresRepository:
             items = self._load_draft_items(cur, draft["id"])
             return InvoiceDraft(
                 user_id=user_id,
+                id=draft["id"],
                 document_type=draft.get("document_type") or "INVOICE",
                 items=items,
                 client_id=draft.get("client_id"),
@@ -560,6 +588,7 @@ class PostgresRepository:
         with self._connect() as conn, conn.cursor() as cur:
             draft_row = self._active_draft_row(cur, user["id"])
             draft_id = draft_row["id"] if draft_row else str(uuid4())
+            draft.id = draft_id
             if draft_row:
                 cur.execute(
                     """
@@ -632,6 +661,7 @@ class PostgresRepository:
             items = self._load_draft_items(cur, draft_row["id"])
             draft = InvoiceDraft(
                 user_id=user_id,
+                id=draft_row["id"],
                 document_type=draft_row.get("document_type") or "INVOICE",
                 items=items,
                 client_id=draft_row.get("client_id"),
@@ -1271,6 +1301,64 @@ class PostgresRepository:
                 """,
                 (customer_id, user["id"]),
             )
+            conn.commit()
+
+    def get_active_tracking(self, user_id: str) -> TrackingSession | None:
+        user = self._ensure_user(user_id)
+        with self._connect() as conn, conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT draft_id, started_at
+                FROM time_tracking_sessions
+                WHERE user_id = %s
+                LIMIT 1
+                """,
+                (user["id"],),
+            )
+            row = cur.fetchone()
+            if not row:
+                return None
+            return TrackingSession(user_id=user_id, draft_id=row["draft_id"], started_at=row["started_at"])
+
+    def start_tracking(self, user_id: str, draft_id: str) -> TrackingSession:
+        user = self._ensure_user(user_id)
+        with self._connect() as conn, conn.cursor() as cur:
+            cur.execute(
+                """
+                INSERT INTO time_tracking_sessions (id, user_id, draft_id, started_at)
+                VALUES (%s, %s, %s, NOW())
+                ON CONFLICT (user_id) DO UPDATE
+                SET draft_id = EXCLUDED.draft_id,
+                    started_at = EXCLUDED.started_at
+                RETURNING started_at
+                """,
+                (str(uuid4()), user["id"], draft_id),
+            )
+            row = cur.fetchone()
+            conn.commit()
+        return TrackingSession(user_id=user_id, draft_id=draft_id, started_at=row["started_at"])
+
+    def stop_tracking(self, user_id: str) -> TrackingSession | None:
+        user = self._ensure_user(user_id)
+        with self._connect() as conn, conn.cursor() as cur:
+            cur.execute(
+                """
+                DELETE FROM time_tracking_sessions
+                WHERE user_id = %s
+                RETURNING draft_id, started_at
+                """,
+                (user["id"],),
+            )
+            row = cur.fetchone()
+            conn.commit()
+        if not row:
+            return None
+        return TrackingSession(user_id=user_id, draft_id=row["draft_id"], started_at=row["started_at"])
+
+    def clear_tracking(self, user_id: str) -> None:
+        user = self._ensure_user(user_id)
+        with self._connect() as conn, conn.cursor() as cur:
+            cur.execute("DELETE FROM time_tracking_sessions WHERE user_id = %s", (user["id"],))
             conn.commit()
 
     def reset_monthly_quota(self) -> int:

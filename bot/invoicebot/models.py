@@ -46,6 +46,7 @@ class Profile:
     next_invoice_number: int = 1
     quote_prefix: str = "QUO"
     next_quote_number: int = 1
+    default_hourly_rate_cents: int = 0
 
 
 @dataclass(slots=True)
@@ -61,6 +62,7 @@ class Client:
 @dataclass(slots=True)
 class InvoiceDraft:
     user_id: str
+    id: str | None = None
     document_type: DocumentType = "INVOICE"
     items: list[InvoiceItem] = field(default_factory=list)
     client_id: str | None = None
@@ -87,3 +89,10 @@ class SupportTicket:
     kind: Literal["BUG", "CLAIM", "IMPROVEMENT", "IDEA"]
     subject: str
     body: str
+
+
+@dataclass(slots=True)
+class TrackingSession:
+    user_id: str
+    draft_id: str
+    started_at: datetime
