@@ -16,6 +16,12 @@ def _utcnow() -> datetime:
     return datetime.now(UTC)
 
 
+def _coerce_utc(dt: datetime) -> datetime:
+    if dt.tzinfo is None:
+        return dt.replace(tzinfo=UTC)
+    return dt.astimezone(UTC)
+
+
 class Repository(Protocol):
     def get_or_create_profile(self, user_id: str) -> Profile: ...
     def save_profile(self, user_id: str, profile: Profile) -> Profile: ...
@@ -1318,7 +1324,7 @@ class PostgresRepository:
             row = cur.fetchone()
             if not row:
                 return None
-            return TrackingSession(user_id=user_id, draft_id=row["draft_id"], started_at=row["started_at"])
+            return TrackingSession(user_id=user_id, draft_id=row["draft_id"], started_at=_coerce_utc(row["started_at"]))
 
     def start_tracking(self, user_id: str, draft_id: str) -> TrackingSession:
         user = self._ensure_user(user_id)
@@ -1336,7 +1342,7 @@ class PostgresRepository:
             )
             row = cur.fetchone()
             conn.commit()
-        return TrackingSession(user_id=user_id, draft_id=draft_id, started_at=row["started_at"])
+        return TrackingSession(user_id=user_id, draft_id=draft_id, started_at=_coerce_utc(row["started_at"]))
 
     def stop_tracking(self, user_id: str) -> TrackingSession | None:
         user = self._ensure_user(user_id)
@@ -1353,7 +1359,7 @@ class PostgresRepository:
             conn.commit()
         if not row:
             return None
-        return TrackingSession(user_id=user_id, draft_id=row["draft_id"], started_at=row["started_at"])
+        return TrackingSession(user_id=user_id, draft_id=row["draft_id"], started_at=_coerce_utc(row["started_at"]))
 
     def clear_tracking(self, user_id: str) -> None:
         user = self._ensure_user(user_id)
